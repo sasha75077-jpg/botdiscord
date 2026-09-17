@@ -1,0 +1,14 @@
+{
+  "$schema": "https://developers.cloudflare.com/pages/platform/build-configuration",
+  "version": 1,
+  "build": {
+    "command": "npm run build",
+    "cwd": "frontend",
+    "output": "dist",
+    "watch_paths": ["frontend/**"]
+  },
+  "preview": {
+    "command": "npm run build",
+    "cwd": "frontend"
+  }
+}
