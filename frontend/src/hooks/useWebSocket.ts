@@ -29,9 +29,11 @@ export const useWebSocket = (guildId: string | null, onMessage?: (message: WebSo
         }, 30000);
 
         const currentWs = ws.current;
-        currentWs.addEventListener('close', () => {
-          clearInterval(pingInterval);
-        });
+        if (currentWs) {
+          currentWs.addEventListener('close', () => {
+            clearInterval(pingInterval);
+          });
+        }
       };
 
       ws.current.onmessage = (event) => {
