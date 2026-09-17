@@ -1,0 +1,1402 @@
+const CHANNELS = {
+  'активация': '1401688390344249394',
+  'дары-моря': '1431968969765421087',
+  'металлургия-сдача': '1401684549469208737',
+  'металлургия-добыча': '1468165528664281112',
+  'товары': '1401684773616750693',
+  'ателье': '1401683990439657573',
+  'агитации-маркетплейс': '1408920399902670968',
+  'агитации-wn': '1458408597590642862',
+  'тюнинг': '1468182499464319091'
+};
+
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { headers: corsHeaders(request) });
+    }
+
+    if (url.pathname === '/') {
+      return new Response(HTML_CONTENT, {
+        headers: {
+          'content-type': 'text/html; charset=UTF-8',
+          ...corsHeaders(request)
+        }
+      });
+    }
+
+    if (url.pathname === '/api/auth/discord/login') {
+      const redirectUri = env.DISCORD_REDIRECT_URI || `${url.origin}/api/auth/discord/callback`;
+      const discordUrl =
+        `https://discord.com/api/oauth2/authorize?client_id=${encodeURIComponent(env.CLIENT_ID)}` +
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        `&response_type=code&scope=identify`;
+      return Response.redirect(discordUrl, 302);
+    }
+
+    if (url.pathname === '/api/auth/discord/callback') {
+      const code = url.searchParams.get('code');
+      if (!code) return json({ ok: false, error: 'Missing code' }, 400, request);
+
+      try {
+        const redirectUri = env.DISCORD_REDIRECT_URI || `${url.origin}/api/auth/discord/callback`;
+
+        const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            client_id: env.CLIENT_ID,
+            client_secret: env.CLIENT_SECRET,
+            grant_type: 'authorization_code',
+            code,
+            redirect_uri: redirectUri,
+            scope: 'identify'
+          })
+        });
+
+        const tokenText = await tokenRes.text();
+        let tokenData = {};
+        try { tokenData = JSON.parse(tokenText); } catch {}
+
+        if (!tokenRes.ok) {
+          throw new Error(`Token failed ${tokenRes.status}: ${tokenText}`);
+        }
+
+        const userRes = await fetch('https://discord.com/api/users/@me', {
+          headers: { authorization: `Bearer ${tokenData.access_token}` }
+        });
+
+        const userText = await userRes.text();
+        let user = {};
+        try { user = JSON.parse(userText); } catch {}
+
+        if (!userRes.ok) {
+          throw new Error(`User failed ${userRes.status}: ${userText}`);
+        }
+
+        const payload = {
+          discordId: String(user.id || ''),
+          username: user.discriminator && user.discriminator !== '0'
+            ? `${user.username}#${user.discriminator}`
+            : String(user.username || 'Discord'),
+          avatar: user.avatar || '',
+          exp: Math.floor(Date.now() / 1000) + 86400
+        };
+
+        const jwt = encodeBase64Url(JSON.stringify(payload));
+        const headers = new Headers();
+        headers.set(
+          'Set-Cookie',
+          `discord_auth=${jwt}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=86400`
+        );
+        headers.set('Location', '/');
+        return new Response(null, { status: 302, headers });
+      } catch (e) {
+        return json({ ok: false, error: e.message || String(e) }, 500, request);
+      }
+    }
+
+    if (url.pathname === '/api/me') {
+      try {
+        const jwt = getCookie(request.headers.get('cookie') || '', 'discord_auth');
+        if (!jwt) return json({ ok: false }, 401, request);
+
+        const payload = JSON.parse(decodeBase64Url(jwt));
+        if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) {
+          return json({ ok: false, error: 'expired' }, 401, request);
+        }
+
+        return json({
+          ok: true,
+          discordId: payload.discordId || '',
+          username: payload.username || 'Discord'
+        }, 200, request);
+      } catch {
+        return json({ ok: false, error: 'invalid' }, 401, request);
+      }
+    }
+
+    if (
+      (url.pathname === '/api/upload' ||
+       url.pathname === '/upload' ||
+       url.pathname === '/api/contracts/create') &&
+      request.method === 'POST'
+    ) {
+      try {
+        const parsed = await parseIncomingRequest(request);
+        const apiMode = url.pathname === '/api/contracts/create';
+
+        if (apiMode) {
+          requireApiToken(request, env);
+        }
+
+        const result = await processContract(env, parsed.payload, parsed.images);
+
+        return json(result, 200, request);
+      } catch (e) {
+        return json({ ok: false, error: e.message || String(e) }, 400, request);
+      }
+    }
+
+    return new Response('Not found', {
+      status: 404,
+      headers: corsHeaders(request)
+    });
+  }
+};
+
+async function parseIncomingRequest(request) {
+  let payload = {};
+  let images = [];
+
+  const contentType = request.headers.get('content-type') || '';
+
+  if (contentType.includes('multipart/form-data')) {
+    const form = await request.formData();
+
+    const payloadRaw = String(form.get('payload') || '{}');
+    try {
+      payload = JSON.parse(payloadRaw);
+    } catch {
+      throw new Error('Invalid payload JSON');
+    }
+
+    const filesCount = Number(form.get('files_count') || 0);
+    for (let i = 0; i < filesCount; i++) {
+      const idx = String(i);
+      images.push({
+        base64: String(form.get('file_' + idx + '_base64') || ''),
+        filename: String(form.get('file_' + idx + '_filename') || ('upload_' + (i + 1) + '.jpg')),
+        mime: String(form.get('file_' + idx + '_mime') || 'image/jpeg'),
+        role: String(form.get('file_' + idx + '_role') || '')
+      });
+    }
+  } else {
+    const body = await request.json();
+    payload = body && body.payload ? body.payload : {};
+    images = Array.isArray(body && body.files) ? body.files : [];
+  }
+
+  return { payload, images };
+}
+
+function requireApiToken(request, env) {
+  const token = request.headers.get('x-api-token') || '';
+  if (!env.API_SHARED_TOKEN) {
+    throw new Error('API_SHARED_TOKEN is not configured');
+  }
+  if (!token || token !== env.API_SHARED_TOKEN) {
+    throw new Error('Unauthorized API request');
+  }
+}
+
+async function processContract(env, payload, images) {
+  const discordId = String(payload.discordId || '').trim();
+  const contractType = String(payload.contractType || '').trim();
+  const fields = payload && typeof payload.fields === 'object' && payload.fields ? payload.fields : {};
+
+  if (!discordId) throw new Error('Fill Discord ID');
+  if (!/^\d{10,25}$/.test(discordId)) throw new Error('Discord ID looks invalid');
+  if (!contractType) throw new Error('Select contract type');
+
+  const channelId = CHANNELS[contractType];
+  if (!channelId) throw new Error('Unknown contractType: ' + contractType);
+
+  validateContractSimple(contractType, fields, images);
+
+  const mention = `<@${discordId}>`;
+  const built = buildDiscordMessage(mention, contractType, fields, images);
+
+  const parsed = await sendToDiscord(env, String(channelId), built, images);
+
+  const mainMsg = parsed && parsed.mainMessage ? parsed.mainMessage : null;
+  const filesMsg = parsed && parsed.filesMessage ? parsed.filesMessage : null;
+
+  const msgId = mainMsg && mainMsg.id ? String(mainMsg.id) : '';
+  const attUrls = Array.isArray(filesMsg && filesMsg.attachments)
+    ? filesMsg.attachments.map(a => String(a.url || '')).filter(Boolean)
+    : [];
+
+  const wnScreenshotsCount = contractType === 'агитации-wn' ? images.length : 0;
+
+  const sheetsResult = await writeToGoogleSheet(env, {
+    gmail: '',
+    payload,
+    files: images.map((x, i) => ({
+      filename: makeSafeDiscordFilename(x.filename || ('upload_' + (i + 1) + '.jpg'), i),
+      role: x.role || '',
+      mime: x.mime || ''
+    })),
+    channel_id: String(channelId),
+    discord_message_id: msgId,
+    attachment_urls: attUrls,
+    wn_screenshots_count: wnScreenshotsCount,
+    status: 'POSTED',
+    result: '',
+    counted: '0',
+    confirm_status: 'PENDING'
+  });
+
+  return {
+    ok: true,
+    rowNumber: sheetsResult && sheetsResult.rowNumber ? sheetsResult.rowNumber : null,
+    status: 200,
+    discord_message_id: msgId,
+    attachment_urls: attUrls,
+    wn_screenshots_count: wnScreenshotsCount,
+    debug_main_message_id: mainMsg && mainMsg.id ? String(mainMsg.id) : '',
+    debug_files_message_id: filesMsg && filesMsg.id ? String(filesMsg.id) : ''
+  };
+}
+
+async function sendToDiscord(env, channelId, built, images) {
+  if (!env.DISCORD_BOT_TOKEN) {
+    throw new Error('DISCORD_BOT_TOKEN is not configured');
+  }
+
+  const apiUrl = `https://discord.com/api/v10/channels/${channelId}/messages`;
+  const botHeaders = {
+    authorization: `Bot ${env.DISCORD_BOT_TOKEN}`
+  };
+
+  const firstResp = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      ...botHeaders,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      content: built.content,
+      embeds: built.embeds,
+      allowed_mentions: { parse: ['users'] }
+    })
+  });
+
+  const firstText = await firstResp.text();
+  let firstParsed = null;
+  try { firstParsed = JSON.parse(firstText); } catch {}
+
+  if (!firstResp.ok) {
+    throw new Error(`FIRST DISCORD ERROR ${firstResp.status}: ${firstText}`);
+  }
+
+  let secondParsed = null;
+
+  if (images.length > 0) {
+    const form = new FormData();
+
+    form.append('payload_json', JSON.stringify({
+      content: 'Скриншоты по контракту'
+    }));
+
+    images.forEach((img, i) => {
+      const bytes = base64ToUint8Array(String(img.base64 || ''));
+      const safeName = makeSafeDiscordFilename(String(img.filename || `upload_${i + 1}.jpg`), i);
+      const blob = new Blob([bytes], { type: String(img.mime || 'image/jpeg') });
+      form.append(`files[${i}]`, blob, safeName);
+    });
+
+    const secondResp = await fetch(apiUrl, {
+      method: 'POST',
+      headers: botHeaders,
+      body: form
+    });
+
+    const secondText = await secondResp.text();
+    try { secondParsed = JSON.parse(secondText); } catch {}
+
+    if (!secondResp.ok) {
+      throw new Error(`SECOND DISCORD ERROR ${secondResp.status}: ${secondText}`);
+    }
+  }
+
+  return {
+    mainMessage: firstParsed,
+    filesMessage: secondParsed
+  };
+}
+
+async function writeToGoogleSheet(env, data) {
+  if (!env.SHEETS_WEBHOOK_URL) {
+    throw new Error('SHEETS_WEBHOOK_URL is not configured');
+  }
+  if (!env.SHEETS_WEBHOOK_TOKEN) {
+    throw new Error('SHEETS_WEBHOOK_TOKEN is not configured');
+  }
+
+  const res = await fetch(env.SHEETS_WEBHOOK_URL, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      token: env.SHEETS_WEBHOOK_TOKEN,
+      ...data
+    })
+  });
+
+  const text = await res.text();
+  let parsed = null;
+  try { parsed = JSON.parse(text); } catch {}
+
+  if (!res.ok) {
+    throw new Error(`Sheets HTTP ${res.status}: ${text}`);
+  }
+  if (!parsed || !parsed.ok) {
+    throw new Error(`Sheets error: ${text}`);
+  }
+
+  return parsed;
+}
+
+function validateContractSimple(contractType, fields, images) {
+  const n = images.length;
+  const require = (cond, msg) => { if (!cond) throw new Error(msg); };
+  const isInt = (v) => Number.isFinite(v) && Math.floor(v) === v;
+
+  switch (contractType) {
+    case 'активация': {
+      const price = Number(fields.price);
+      require(isInt(price) && price > 0, 'Активация: укажи сумму (целое число > 0).');
+      require(price <= 20000, 'Активация: сумма не должна превышать 20000.');
+      require(n === 1, 'Активация: можно прикрепить только 1 скриншот.');
+      break;
+    }
+    case 'дары-моря': {
+      const fishType = String(fields.fishType || '').trim();
+      const fishQty = Number(fields.fishQty);
+      require(fishType.length >= 2, 'Дары моря: укажи вид рыбы.');
+      require(isInt(fishQty) && fishQty > 0, 'Дары моря: укажи количество (целое число > 0).');
+      require(n >= 1 && n <= 10, 'Дары моря: нужно 1..10 скриншотов.');
+      break;
+    }
+    case 'металлургия-сдача': {
+      const oreType = String(fields.oreType || '').trim();
+      const allowed = ['Железная руда', 'Серебряная руда', 'Медная руда', 'Оловянная руда', 'Золотая руда'];
+      require(allowed.includes(oreType), 'Металлургия сдача: выбери руду из списка.');
+      require(n === 1, 'Металлургия сдача: можно прикрепить только 1 скриншот.');
+      break;
+    }
+    case 'металлургия-добыча': {
+      const keys = ['iron', 'silver', 'copper', 'tin', 'gold'];
+      const any = keys.some(k => Number(fields[k]) > 0);
+      require(any, 'Металлургия добыча: укажи количество хотя бы для одного ресурса.');
+      require(n >= 1 && n <= 10, 'Металлургия добыча: нужно 1..10 скриншотов.');
+      break;
+    }
+    case 'товары': {
+      require(n >= 1 && n <= 2, 'Товары: можно 1 или 2 скриншота.');
+      break;
+    }
+    case 'ателье': {
+      const total = Number(fields.totalUniforms);
+      require(isInt(total) && total > 0, 'Ателье: укажи общее кол-во нашитых форм (целое число > 0).');
+      require(n >= 1 && n <= 10, 'Ателье: нужно 1..10 скриншотов.');
+      break;
+    }
+    case 'агитации-маркетплейс': {
+      const links = Array.isArray(fields.links) ? fields.links : [];
+      require(links.length >= 1, 'Маркетплейс: вставь хотя бы 1 ссылку.');
+      require(n === 0, 'Маркетплейс: скриншоты не требуются.');
+      break;
+    }
+    case 'агитации-wn': {
+      const category = String(fields.category || '').trim();
+      require(['Зеленка(чат)', 'Уведомление'].includes(category), 'WN: выбери категорию.');
+      require(n >= 1 && n <= 10, 'WN: нужно 1..10 скриншотов.');
+      break;
+    }
+    case 'тюнинг': {
+      require(n === 1, 'Тюнинг: можно прикрепить только 1 скриншот.');
+      break;
+    }
+    default:
+      throw new Error('Неизвестный контракт: ' + contractType);
+  }
+}
+
+function buildDiscordMessage(mention, contractType, fields, images) {
+  const contentLines = [mention, `Контракт: ${contractType}`];
+
+  const embed = {
+    title: `Отчёт: ${contractType}`,
+    color: 0x9b7bff,
+    fields: [],
+    footer: { text: 'Auto report' },
+    timestamp: new Date().toISOString()
+  };
+
+  const addField = (name, value, inline = false) => {
+    const v = String(value ?? '').trim() || '-';
+    embed.fields.push({
+      name: String(name).slice(0, 256),
+      value: v.slice(0, 1024),
+      inline: !!inline
+    });
+  };
+
+  if (contractType === 'активация') {
+    addField('Сумма', String(Number(fields.price || 0)), true);
+  } else if (contractType === 'дары-моря') {
+    addField('Рыба', String(fields.fishType || '').trim() || '-', true);
+    addField('Количество', String(Number(fields.fishQty || 0)), true);
+  } else if (contractType === 'металлургия-сдача') {
+    addField('Руда', String(fields.oreType || '').trim() || '-', true);
+  } else if (contractType === 'металлургия-добыча') {
+    const map = [
+      ['iron', 'Железо'],
+      ['silver', 'Серебро'],
+      ['copper', 'Медь'],
+      ['tin', 'Олово'],
+      ['gold', 'Золото']
+    ];
+    map.forEach(([k, label]) => {
+      const v = Number(fields[k] || 0);
+      if (v > 0) addField(label, String(v), true);
+    });
+  } else if (contractType === 'товары') {
+    const hasDelivery = images.some(x => String(x.role || '') === 'delivery');
+    const hasLoading = images.some(x => String(x.role || '') === 'loading');
+    addField('Сдача', hasDelivery ? 'YES' : '', true);
+    addField('Погрузка', hasLoading ? 'YES' : '', true);
+  } else if (contractType === 'ателье') {
+    addField('Нашито форм (всего)', String(Number(fields.totalUniforms || 0)), true);
+  } else if (contractType === 'агитации-маркетплейс') {
+    const links = Array.isArray(fields.links) ? fields.links : [];
+    addField('Ссылок', String(links.length), true);
+    addField('Ссылки', links.slice(0, 10).join('\n') || '-', false);
+  } else if (contractType === 'агитации-wn') {
+    addField('Категория', String(fields.category || '').trim() || '-', true);
+    addField('Скриншотов', String(images.length), true);
+  } else if (contractType === 'тюнинг') {
+    addField('Скриншот', images.length ? 'YES' : '', true);
+  }
+
+  if (images.length) {
+    const list = images.map((img, i) => {
+      const role = String(img.role || '').trim();
+      const name = makeSafeDiscordFilename(String(img.filename || `upload_${i + 1}.jpg`), i);
+      return role ? `${i + 1}. ${role} — ${name}` : `${i + 1}. ${name}`;
+    }).join('\n');
+
+    addField('Скриншоты', list, false);
+  }
+
+  return {
+    content: contentLines.join('\n'),
+    embeds: [embed]
+  };
+}
+
+function json(data, status = 200, request = null) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      'content-type': 'application/json; charset=UTF-8',
+      ...(request ? corsHeaders(request) : {})
+    }
+  });
+}
+
+function corsHeaders(request) {
+  const origin = request.headers.get('origin') || '*';
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, x-api-token',
+    'Access-Control-Allow-Credentials': 'true'
+  };
+}
+
+function getCookie(cookieHeader, name) {
+  const parts = cookieHeader.split(';').map(x => x.trim());
+  for (const p of parts) {
+    const i = p.indexOf('=');
+    if (i === -1) continue;
+    const k = p.slice(0, i);
+    const v = p.slice(i + 1);
+    if (k === name) return v;
+  }
+  return '';
+}
+
+function encodeBase64Url(str) {
+  return btoa(unescape(encodeURIComponent(str)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function decodeBase64Url(str) {
+  const pad = str.length % 4 === 0 ? '' : '='.repeat(4 - (str.length % 4));
+  const base64 = str.replace(/-/g, '+').replace(/_/g, '/') + pad;
+  return decodeURIComponent(escape(atob(base64)));
+}
+
+function base64ToUint8Array(base64) {
+  const bin = atob(base64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return arr;
+}
+
+function makeSafeDiscordFilename(name, index = 0) {
+  const extMatch = String(name).match(/\.([a-zA-Z0-9]+)$/);
+  const ext = extMatch ? `.${extMatch[1].toLowerCase()}` : '.jpg';
+
+  const base = String(name)
+    .replace(/\.[^/.]+$/, '')
+    .normalize('NFKD')
+    .replace(/[^\w.-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 30) || 'upload';
+
+  return `${base}_${index + 1}${ext}`;
+}
+
+
+const HTML_CONTENT = String.raw`<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{
+      --bg0:#05060a; --bg1:#0b1020; --card:#0b0f1aee; --card2:#0b0f1acc; --text:#e8e8f2;
+      --muted:#a7a7bd; --danger:#ff4d6d; --ok:#7CFFB2; --shadow:0 18px 60px rgba(0,0,0,.55);
+      --radius:16px; --accent1:rgba(155,123,255,.95); --accent2:rgba(50,211,197,.75);
+      --accentText:#0b0f1a; --panelBg1:rgba(11,15,26,.92); --panelBg2:rgba(11,15,26,.75);
+      --borderSoft:rgba(255,255,255,.14); --borderSofter:rgba(255,255,255,.10);
+      --bgGlow1:rgba(155,123,255,.18); --bgGlow2:rgba(50,211,197,.10); --bgPattern:none;
+      --grid1:rgba(255,255,255,.06); --grid2:rgba(255,255,255,.03); --gridSize1:46px; --gridSize2:9px;
+    }
+    html[data-theme="industrial"]{
+      --bg0:#06080b; --bg1:#12161d; --card:#0d1118ee; --card2:#0b0f16cc; --text:#e8edf6; --muted:#a2adbf;
+      --danger:#ff4d6d; --ok:#7CFFB2; --shadow:0 18px 60px rgba(0,0,0,.70);
+      --accent1:rgba(255,200,60,.95); --accent2:rgba(120,200,255,.80); --accentText:#0b0f1a;
+      --panelBg1:rgba(10,14,20,.94); --panelBg2:rgba(10,14,20,.78); --borderSoft:rgba(255,255,255,.16);
+      --borderSofter:rgba(255,255,255,.10); --bgGlow1:rgba(120,200,255,.12); --bgGlow2:rgba(255,200,60,.10);
+      --grid1:rgba(170,210,255,.07); --grid2:rgba(255,255,255,.03);
+      --bgPattern:
+        repeating-linear-gradient(to right, transparent 0 calc(var(--gridSize1) - 1px), var(--grid1) calc(var(--gridSize1) - 1px) var(--gridSize1)),
+        repeating-linear-gradient(to bottom, transparent 0 calc(var(--gridSize1) - 1px), var(--grid1) calc(var(--gridSize1) - 1px) var(--gridSize1)),
+        repeating-linear-gradient(to right, transparent 0 calc(var(--gridSize2) - 1px), var(--grid2) calc(var(--gridSize2) - 1px) var(--gridSize2)),
+        repeating-linear-gradient(to bottom, transparent 0 calc(var(--gridSize2) - 1px), var(--grid2) calc(var(--gridSize2) - 1px) var(--gridSize2));
+    }
+    html[data-theme="sakura"]{
+      --bg0:#2a0b18; --bg1:#3a1022; --card:#1a0a13ee; --card2:#160810cc; --text:#fff4f8; --muted:#f1b6cb;
+      --danger:#ff4d6d; --ok:#7CFFB2; --shadow:0 18px 60px rgba(0,0,0,.58);
+      --accent1:rgba(255,140,186,.95); --accent2:rgba(155,123,255,.80); --accentText:#1a0711;
+      --panelBg1:rgba(26,10,19,.94); --panelBg2:rgba(26,10,19,.78); --borderSoft:rgba(255,210,226,.22);
+      --borderSofter:rgba(255,255,255,.10); --bgGlow1:rgba(255,140,186,.16); --bgGlow2:rgba(155,123,255,.10);
+      --bgPattern:none;
+    }
+    body{
+      margin:0; font-family:ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; color:var(--text);
+      background:radial-gradient(1200px 700px at 20% 10%, var(--bgGlow1), transparent 60%), radial-gradient(900px 600px at 90% 30%, var(--bgGlow2), transparent 65%), var(--bgPattern), linear-gradient(160deg, var(--bg0), var(--bg1));
+      min-height:100vh; padding:26px 14px;
+    }
+    .wrap{max-width:860px;margin:0 auto}.title{font-weight:700;letter-spacing:.3px;margin:0 0 10px;font-size:22px}.sub{margin:0 0 18px;color:var(--muted);font-size:13px;line-height:1.45}
+    .card{background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid rgba(255,255,255,.06);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+    .card-body{padding:18px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media (max-width:720px){.grid{grid-template-columns:1fr}}
+    label{display:block;font-size:12px;color:var(--muted);margin:0 0 6px}
+    input,select,textarea{width:100%;box-sizing:border-box;border-radius:12px;border:1px solid rgba(255,255,255,.10);background:rgba(0,0,0,.22);color:var(--text);padding:10px 12px;outline:none}
+    textarea{min-height:110px;resize:vertical}.hint{margin-top:6px;font-size:12px;color:rgba(167,167,189,.85)}.section{margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.06)}
+    .contract-panel{margin-top:12px;border:1px dashed rgba(155,123,255,.28);background:rgba(155,123,255,.05);padding:14px;border-radius:14px}
+    input[type="file"]{cursor:pointer}.fileList{margin-top:8px;font-size:12px;color:rgba(167,167,189,.92);white-space:pre-wrap;user-select:text}
+    .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;align-items:center}
+    button{border:0;border-radius:12px;padding:10px 14px;background:linear-gradient(135deg,var(--accent1),var(--accent2));color:var(--accentText);font-weight:700;cursor:pointer}
+    button:disabled{opacity:.55;cursor:not-allowed;transform:none}.ghost{background:transparent;border:1px solid rgba(255,255,255,.12);color:var(--text);font-weight:600}
+    .loginLink{display:inline-block;text-decoration:none;border:0;border-radius:12px;padding:10px 14px;background:linear-gradient(135deg,var(--accent1),var(--accent2));color:var(--accentText);font-weight:700}
+    pre{margin-top:14px;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:12px;white-space:pre-wrap;color:#e7e7ff;overflow:auto}
+    .status-ok{color:var(--ok)}.status-err{color:var(--danger)}.previewGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-top:10px}
+    .previewItem{position:relative;border:1px solid rgba(255,255,255,.10);border-radius:12px;overflow:hidden;background:rgba(0,0,0,.20)}
+    .previewItem img{display:block;width:100%;height:110px;object-fit:cover}.previewMeta{padding:8px 10px;font-size:12px;color:rgba(167,167,189,.92);word-break:break-word}
+    .previewDel{position:absolute;top:6px;right:6px;width:26px;height:26px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(0,0,0,.55);color:#fff;cursor:pointer;line-height:24px;text-align:center;font-weight:700}
+    .previewDel:hover{background:rgba(0,0,0,.75)}.previewActions{display:none;margin-top:8px;gap:10px;align-items:center}.previewActions.show{display:flex}
+    .previewClear{padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.14);background:rgba(0,0,0,.25);color:rgba(232,232,242,.95);cursor:pointer;font-weight:600}
+    .previewClear:hover{background:rgba(0,0,0,.38)}.themeDock{position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);left:calc(env(safe-area-inset-left,0px) + 10px);z-index:9999;display:grid;gap:8px}
+    .themeToggle{position:relative;border:1px solid var(--borderSoft);border-radius:12px;padding:9px 12px;background:rgba(0,0,0,.25);color:rgba(232,232,242,.95);font-weight:800;cursor:pointer;overflow:hidden;text-align:left;min-width:150px}
+    .themeToggle::before{content:"";position:absolute;left:0;top:0;width:100%;height:3px;background:linear-gradient(135deg,var(--accent1),var(--accent2));opacity:.95}
+    .themeToggle:hover{background:rgba(0,0,0,.38)}.themeMini{font-weight:900;letter-spacing:.2px;opacity:.95}.themePanel{border:1px solid var(--borderSofter);border-radius:14px;padding:10px;background:linear-gradient(180deg,var(--panelBg1),var(--panelBg2));box-shadow:var(--shadow);max-width:min(92vw,360px)}
+    .themeSeg{display:inline-flex;align-items:center;gap:0;border:1px solid var(--borderSoft);border-radius:12px;overflow:hidden;background:rgba(0,0,0,.18)}
+    .themeSeg input{position:absolute;opacity:0;pointer-events:none}.themeSeg label{margin:0;padding:9px 12px;font-size:12px;color:rgba(232,232,242,.9);cursor:pointer;user-select:none;border-right:1px solid rgba(255,255,255,.10)}
+    .themeSeg label:last-of-type{border-right:0}.themeSeg input:focus + label{outline:2px solid rgba(155,123,255,.55);outline-offset:-2px}.themeSeg input:checked + label{color:var(--accentText);font-weight:800;background:linear-gradient(135deg,var(--accent1),var(--accent2))}
+    @media (max-width:420px){.themeDock{left:10px;right:10px}.themeToggle{min-width:0;width:100%}.themePanel{max-width:none}.themeSeg{width:100%;justify-content:space-between}}
+    #contractType{background:#fff!important;color:#000!important;border:1px solid rgba(0,0,0,.25)!important}
+    #contractType option{background:#fff!important;color:#000!important}#contractType option:checked{background:#eaeaea!important;color:#000!important}.authRow{margin-top:10px}
+  </style>
+</head>
+<body>
+<div class="themeDock" role="region" aria-label="Переключение темы">
+  <button id="themeToggle" class="themeToggle" type="button" aria-expanded="false" aria-controls="themePanel">Тема: <span id="themeMini" class="themeMini">Neo</span></button>
+  <div id="themePanel" class="themePanel" hidden aria-labelledby="themeToggle">
+    <div class="themeSeg" role="group" aria-label="Тема">
+      <input type="radio" name="theme" id="thNeo" value="neo"><label for="thNeo">Neo</label>
+      <input type="radio" name="theme" id="thInd" value="industrial"><label for="thInd">Industrial</label>
+      <input type="radio" name="theme" id="thSak" value="sakura"><label for="thSak">Sakura</label>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <h1 class="title">Загрузка отчёта</h1>
+  <p class="sub">Выбираешь контракт → вводишь данные → прикрепляешь скриншоты → отправляешь в Discord и в Google Sheet. Можно вставлять скриншоты Ctrl+V.</p>
+
+  <div class="card">
+    <div class="card-body">
+      <form id="mainForm">
+        <div class="grid">
+          <div>
+            <label for="discordId">Discord ID</label>
+            <input id="discordId" placeholder="335065897398042626" />
+            <div class="hint">Нужен ID, чтобы упомянуть пользователя.</div>
+            <div class="authRow">
+              <div class="hint" id="authHint">Можно войти через Discord, чтобы ID подставлялся автоматически.</div>
+              <div class="actions">
+                <a id="discordLoginBtn" class="loginLink" href="/api/auth/discord/login">Войти через Discord</a>
+                <button id="useMyDiscordBtn" type="button" class="ghost">Подставить мой ID</button>
+              </div>
+            </div>
+          </div>
+          <div>
+            <label for="contractType">Контракт</label>
+            <select id="contractType"></select>
+          </div>
+        </div>
+
+        <div id="panel" class="contract-panel"></div>
+
+        <div class="actions">
+          <button id="sendBtn" type="button">Отправить</button>
+          <button class="ghost" id="resetBtn" type="button">Сброс</button>
+        </div>
+      </form>
+
+      <pre id="out">Готов.</pre>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const form = document.getElementById('mainForm');
+  form.addEventListener('submit', (e) => e.preventDefault());
+
+  const out = document.getElementById('out');
+  const setOut = (text, ok=null) => {
+    if (out) {
+      if (ok === true) out.textContent = 'Отправлено';
+      else if (ok === false) out.textContent = String(text || 'Ошибка');
+      else out.textContent = 'Готов.';
+      out.className = ok === true ? 'status-ok' : ok === false ? 'status-err' : '';
+    }
+  };
+
+  const setSending = (isSending) => {
+    if (!out) return;
+    if (isSending) {
+      out.textContent = 'Отправка...';
+      out.className = '';
+    }
+  };
+
+  const MAX_SIDE = 1920;
+  const JPEG_QUALITY = 0.8;
+  const oreOptions = ["Железная руда","Серебряная руда","Медная руда","Оловянная руда","Золотая руда"];
+
+  const contracts = [
+    'активация','дары-моря','металлургия-сдача','металлургия-добыча',
+    'товары','ателье','агитации-маркетплейс','агитации-wn','тюнинг'
+  ];
+
+  const ctSel = document.getElementById('contractType');
+  contracts.forEach(v => {
+    const o = document.createElement('option');
+    o.value = v;
+    o.textContent = v;
+    ctSel.appendChild(o);
+  });
+
+  const THEMES = new Set(['neo','industrial','sakura']);
+
+  function themeLabel(t){
+    if (t === 'neo') return 'Neo';
+    if (t === 'industrial') return 'Industrial';
+    if (t === 'sakura') return 'Sakura';
+    return t;
+  }
+
+  function applyTheme(theme){
+    const t = THEMES.has(theme) ? theme : 'neo';
+    document.documentElement.setAttribute('data-theme', t);
+    localStorage.setItem('ui_theme', t);
+    const radio = document.querySelector('.themeSeg input[value="' + t + '"]');
+    if (radio) radio.checked = true;
+    const mini = document.getElementById('themeMini');
+    if (mini) mini.textContent = themeLabel(t);
+  }
+
+  function setThemePanel(open){
+    const btn = document.getElementById('themeToggle');
+    const panel = document.getElementById('themePanel');
+    if (!btn || !panel) return;
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    panel.hidden = !open;
+    localStorage.setItem('ui_theme_panel_open', open ? '1' : '0');
+  }
+
+  function initThemeUI(){
+    applyTheme(localStorage.getItem('ui_theme') || 'neo');
+
+    document.querySelectorAll('.themeSeg input[name="theme"]').forEach(r => {
+      r.addEventListener('change', () => applyTheme(r.value));
+    });
+
+    setThemePanel(localStorage.getItem('ui_theme_panel_open') === '1');
+
+    document.getElementById('themeToggle').addEventListener('click', () => {
+      const btn = document.getElementById('themeToggle');
+      const open = btn.getAttribute('aria-expanded') === 'true';
+      setThemePanel(!open);
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') setThemePanel(false);
+    });
+
+    document.addEventListener('mousedown', (e) => {
+      const dock = document.querySelector('.themeDock');
+      if (!dock) return;
+      if (!dock.contains(e.target)) setThemePanel(false);
+    });
+  }
+  initThemeUI();
+
+  function setAuthHint(t){
+    const h = document.getElementById('authHint');
+    if (h) h.textContent = t;
+  }
+
+  async function loadMe(){
+    try {
+      const res = await fetch('/api/me', { credentials: 'same-origin' });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data && data.ok && data.discordId) {
+        const inp = document.getElementById('discordId');
+        if (inp && !inp.value.trim()) inp.value = data.discordId;
+        setAuthHint('Выполнен вход: ' + (data.username || 'Discord') + ' (' + data.discordId + ')');
+      }
+    } catch (e) {}
+  }
+
+  document.getElementById('useMyDiscordBtn')?.addEventListener('click', loadMe);
+  loadMe();
+
+  let selectionOrder = [];
+  function rememberOrder(role){
+    selectionOrder = selectionOrder.filter(x => x !== role);
+    selectionOrder.push(role);
+  }
+
+  let lastFileTarget = null;
+  let hoveredFileTarget = null;
+
+  const previewUrls = new Map();
+  const inputHashes = new Map();
+  function getHashSet(inputId){
+    if (!inputHashes.has(inputId)) inputHashes.set(inputId, new Set());
+    return inputHashes.get(inputId);
+  }
+
+  async function sha256Hex(file){
+    const buf = await file.arrayBuffer();
+    const hashBuf = await crypto.subtle.digest('SHA-256', buf);
+    const hashArr = Array.from(new Uint8Array(hashBuf));
+    return hashArr.map(b => b.toString(16).padStart(2,'0')).join('');
+  }
+
+  function clearPreviewUrls(inputId){
+    const arr = previewUrls.get(inputId) || [];
+    arr.forEach(u => { try { URL.revokeObjectURL(u); } catch(e){} });
+    previewUrls.set(inputId, []);
+  }
+
+  function removeFileAt(inputEl, index){
+    const dt = new DataTransfer();
+    const arr = inputEl.files ? [...inputEl.files] : [];
+    arr.forEach((f, i) => { if (i !== index) dt.items.add(f); });
+    inputEl.files = dt.files;
+    inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function clearFiles(inputEl, role){
+    const dt = new DataTransfer();
+    inputEl.files = dt.files;
+
+    if (ctSel.value === 'товары' && role) {
+      selectionOrder = selectionOrder.filter(x => x !== role);
+    }
+
+    inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function renderPreview(inputEl, previewEl){
+    if (!inputEl || !previewEl) return;
+    clearPreviewUrls(inputEl.id);
+    previewEl.innerHTML = '';
+
+    const files = inputEl.files ? [...inputEl.files] : [];
+    if (!files.length) return;
+
+    const grid = document.createElement('div');
+    grid.className = 'previewGrid';
+    previewEl.appendChild(grid);
+
+    const urls = [];
+    files.forEach((f, idx) => {
+      if (!f.type || !f.type.startsWith('image/')) return;
+
+      const url = URL.createObjectURL(f);
+      urls.push(url);
+
+      const item = document.createElement('div');
+      item.className = 'previewItem';
+
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'previewDel';
+      del.textContent = '×';
+      del.addEventListener('click', () => removeFileAt(inputEl, idx));
+
+      const img = document.createElement('img');
+      img.src = url;
+
+      const meta = document.createElement('div');
+      meta.className = 'previewMeta';
+      meta.textContent = f.name + ' (' + Math.round(f.size/1024) + ' KB)';
+
+      item.appendChild(del);
+      item.appendChild(img);
+      item.appendChild(meta);
+      grid.appendChild(item);
+    });
+
+    previewUrls.set(inputEl.id, urls);
+  }
+
+  function clear(el){ while(el.firstChild) el.removeChild(el.firstChild); }
+  function addLabel(parent, text){ const l=document.createElement('label'); l.textContent=text; parent.appendChild(l); return l; }
+  function addHint(parent, text){ const d=document.createElement('div'); d.className='hint'; d.textContent=text; parent.appendChild(d); return d; }
+  function addInput(parent, id, type, placeholder){
+    const i=document.createElement('input');
+    i.id=id; i.type=type||'text';
+    if (placeholder) i.placeholder=placeholder;
+    parent.appendChild(i);
+    return i;
+  }
+  function addSelect(parent, id, values){
+    const s=document.createElement('select');
+    s.id=id;
+    values.forEach(v => {
+      const o=document.createElement('option');
+      o.value=v;
+      o.textContent=v;
+      s.appendChild(o);
+    });
+    parent.appendChild(s);
+    return s;
+  }
+  function addTextarea(parent, id, placeholder){
+    const t=document.createElement('textarea');
+    t.id=id;
+    if (placeholder) t.placeholder=placeholder;
+    parent.appendChild(t);
+    return t;
+  }
+
+  function addFile(parent, id, multiple, listId, onChange, role){
+    const i = addInput(parent, id, 'file');
+    i.accept='image/*';
+    if (multiple) i.multiple = true;
+
+    const list=document.createElement('div');
+    list.className='fileList';
+    list.id=listId;
+    list.textContent='Файлы не выбраны';
+    parent.appendChild(list);
+
+    const preview = document.createElement('div');
+    preview.id = id + '_preview';
+    parent.appendChild(preview);
+
+    const actions = document.createElement('div');
+    actions.className = 'previewActions';
+
+    const clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
+    clearBtn.className = 'previewClear';
+    clearBtn.textContent = 'Очистить';
+    clearBtn.addEventListener('click', () => clearFiles(i, role));
+
+    actions.appendChild(clearBtn);
+    parent.appendChild(actions);
+
+    function updateActionsVisibility(){
+      const has = i.files && i.files.length > 0;
+      actions.classList.toggle('show', !!has);
+    }
+    updateActionsVisibility();
+
+    i.addEventListener('click', () => { lastFileTarget = id; });
+    i.addEventListener('focus', () => { lastFileTarget = id; });
+
+    const markHover = () => { hoveredFileTarget = id; };
+    const unmarkHover = () => { if (hoveredFileTarget === id) hoveredFileTarget = null; };
+    i.addEventListener('mouseenter', markHover);
+    i.addEventListener('mouseleave', unmarkHover);
+    preview.addEventListener('mouseenter', markHover);
+    preview.addEventListener('mouseleave', unmarkHover);
+    list.addEventListener('mouseenter', markHover);
+    list.addEventListener('mouseleave', unmarkHover);
+
+    i.addEventListener('change', () => {
+      const files=[...i.files].map(f => f.name + ' (' + f.size + ' bytes)');
+      list.textContent = files.length ? files.join('\n') : 'Файлы не выбраны';
+      renderPreview(i, preview);
+      updateActionsVisibility();
+      if (typeof onChange === 'function') onChange();
+    });
+
+    return i;
+  }
+
+  function addHr(parent){
+    const d=document.createElement('div');
+    d.className='section';
+    parent.appendChild(d);
+    return d;
+  }
+
+  function render(){
+    const ct = ctSel.value;
+    const panel = document.getElementById('panel');
+    clear(panel);
+
+    for (const k of previewUrls.keys()) clearPreviewUrls(k);
+    inputHashes.clear();
+    selectionOrder = [];
+    lastFileTarget = null;
+    hoveredFileTarget = null;
+
+    if (ct === 'активация'){
+      const g=document.createElement('div'); g.className='grid'; panel.appendChild(g);
+      const a=document.createElement('div'); g.appendChild(a);
+      addLabel(a,'Сумма (до 20000)');
+      const p=addInput(a,'price','number','15000'); p.min='1'; p.max='20000'; p.step='1';
+      addHint(a,'Целое число.');
+      const b=document.createElement('div'); g.appendChild(b);
+      addLabel(b,'Скриншот (1 шт.)');
+      addFile(b,'filesMain',false,'listMain');
+    }
+    else if (ct === 'дары-моря'){
+      const g=document.createElement('div'); g.className='grid'; panel.appendChild(g);
+      const a=document.createElement('div'); g.appendChild(a);
+      addLabel(a,'Вид рыбы'); addInput(a,'fishType','text','лосось');
+      const b=document.createElement('div'); g.appendChild(b);
+      addLabel(b,'Количество');
+      const q=addInput(b,'fishQty','number','20'); q.min='1'; q.step='1';
+      addHr(panel);
+      addLabel(panel,'Скриншоты (можно несколько)');
+      addFile(panel,'filesMain',true,'listMain');
+      addHint(panel,'Макс 10 файлов.');
+    }
+    else if (ct === 'металлургия-сдача'){
+      const g=document.createElement('div'); g.className='grid'; panel.appendChild(g);
+      const a=document.createElement('div'); g.appendChild(a);
+      addLabel(a,'Какая руда сдавалась'); addSelect(a,'oreType',oreOptions);
+      const b=document.createElement('div'); g.appendChild(b);
+      addLabel(b,'Скриншот (1 шт.)');
+      addFile(b,'filesMain',false,'listMain');
+    }
+    else if (ct === 'металлургия-добыча'){
+      const g=document.createElement('div'); g.className='grid'; panel.appendChild(g);
+      const f=(label,id)=>{
+        const d=document.createElement('div');
+        g.appendChild(d);
+        addLabel(d,label);
+        const i=addInput(d,id,'number','0'); i.min='0'; i.step='1';
+      };
+      f('Железо','m_iron'); f('Серебро','m_silver'); f('Медь','m_copper'); f('Олово','m_tin'); f('Золото','m_gold');
+      addHr(panel);
+      const b=document.createElement('div'); g.appendChild(b);
+      addLabel(b,'Скриншоты (можно несколько)');
+      addFile(b,'filesMain',true,'listMain');
+      addHint(b,'Макс 10 файлов.');
+    }
+    else if (ct === 'товары'){
+      const g=document.createElement('div'); g.className='grid'; panel.appendChild(g);
+      const a=document.createElement('div'); g.appendChild(a);
+      addLabel(a,'Скрин: Сдача (необязательно)');
+      addFile(a,'fileDelivery',false,'listDelivery', () => rememberOrder('delivery'), 'delivery');
+      const b=document.createElement('div'); g.appendChild(b);
+      addLabel(b,'Скрин: Погрузка (необязательно)');
+      addFile(b,'fileLoading',false,'listLoading', () => rememberOrder('loading'), 'loading');
+      addHint(panel,'Правило Ctrl+V: если курсор наведен на блок — скрин заменится в нём; иначе вставка пойдет в первый пустой.');
+    }
+    else if (ct === 'ателье'){
+      const g=document.createElement('div'); g.className='grid'; panel.appendChild(g);
+      const a=document.createElement('div'); g.appendChild(a);
+      addLabel(a,'Общее кол-во нашитых форм');
+      const q=addInput(a,'atelierTotal','number','1'); q.min='1'; q.step='1';
+      addHint(a,'Целое число.');
+      const b=document.createElement('div'); g.appendChild(b);
+      addLabel(b,'Скриншоты (можно несколько)');
+      addFile(b,'filesMain',true,'listMain');
+      addHint(b,'Макс 10 файлов.');
+    }
+    else if (ct === 'агитации-маркетплейс'){
+      addLabel(panel,'Ссылки (каждая с новой строки)');
+      addTextarea(panel,'links','https://discord.com/channels/...\nhttps://discord.com/channels/...');
+      addHint(panel,'Скриншоты не нужны.');
+    }
+    else if (ct === 'агитации-wn'){
+      const g=document.createElement('div'); g.className='grid'; panel.appendChild(g);
+      const a=document.createElement('div'); g.appendChild(a);
+      addLabel(a,'Категория');
+      addSelect(a,'wnCategory',['Зеленка(чат)','Уведомление']);
+      const b=document.createElement('div'); g.appendChild(b);
+      addLabel(b,'Скриншоты (можно несколько)');
+      addFile(b,'filesMain',true,'listMain');
+      addHint(b,'Макс 10 файлов.');
+    }
+    else if (ct === 'тюнинг'){
+      const g=document.createElement('div'); g.className='grid'; panel.appendChild(g);
+      const b=document.createElement('div'); g.appendChild(b);
+      addLabel(b,'Скриншот сдачи (1 шт.)');
+      addFile(b,'filesMain',false,'listMain');
+    }
+  }
+
+  ctSel.addEventListener('change', render);
+  render();
+
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    document.getElementById('discordId').value = '';
+    ctSel.value = 'активация';
+    render();
+    setOut('', null);
+  });
+
+  document.addEventListener('paste', async (e) => {
+    try {
+      const tag = (document.activeElement && document.activeElement.tagName || '').toLowerCase();
+      if (tag === 'textarea') return;
+      if (tag === 'input') {
+        const type = (document.activeElement.getAttribute('type') || '').toLowerCase();
+        if (type === 'text' || type === 'number') return;
+      }
+
+      const dtClip = e.clipboardData;
+      if (!dtClip) return;
+
+      const images = [];
+      const items = dtClip.items ? [...dtClip.items] : [];
+      for (const it of items) {
+        if (it.kind === 'file' && it.type && it.type.startsWith('image/')) {
+          const f = it.getAsFile();
+          if (f) images.push(f);
+        }
+      }
+      if (!images.length && dtClip.files && dtClip.files.length) {
+        const f = dtClip.files[0];
+        if (f && f.type && f.type.startsWith('image/')) images.push(f);
+      }
+      if (!images.length) return;
+
+      e.preventDefault();
+      const ct = ctSel.value;
+
+      function getInput(id){
+        const el = document.getElementById(id);
+        return (el && el.type === 'file') ? el : null;
+      }
+
+      function pickTargetIdForGoodsByRule(){
+        if (hoveredFileTarget && (hoveredFileTarget === 'fileDelivery' || hoveredFileTarget === 'fileLoading')) {
+          return hoveredFileTarget;
+        }
+        const d = getInput('fileDelivery');
+        const l = getInput('fileLoading');
+        if (d && (!d.files || d.files.length === 0)) return 'fileDelivery';
+        if (l && (!l.files || l.files.length === 0)) return 'fileLoading';
+        return lastFileTarget || 'fileLoading';
+      }
+
+      function pickTargetIdDefault(){
+        if (ct === 'товары') return pickTargetIdForGoodsByRule();
+        return hoveredFileTarget || lastFileTarget || 'filesMain';
+      }
+
+      for (const imgFile of images) {
+        const targetId = pickTargetIdDefault();
+        const inp = getInput(targetId);
+        if (!inp) continue;
+
+        const hset = getHashSet(inp.id);
+        const hex = await sha256Hex(imgFile);
+        if (hset.has(hex)) continue;
+        hset.add(hex);
+
+        const dt = new DataTransfer();
+        const existing = inp.files ? [...inp.files] : [];
+        if (inp.multiple) {
+          existing.forEach(f => dt.items.add(f));
+          dt.items.add(imgFile);
+        } else {
+          dt.items.add(imgFile);
+        }
+
+        inp.files = dt.files;
+        inp.dispatchEvent(new Event('change', { bubbles: true }));
+
+        if (ct === 'товары') {
+          if (targetId === 'fileDelivery') rememberOrder('delivery');
+          if (targetId === 'fileLoading') rememberOrder('loading');
+          lastFileTarget = targetId;
+        }
+      }
+    } catch (err) {
+      console.error('ERROR:', err && err.message ? err.message : String(err));
+    }
+  });
+
+  function asciiFilename(originalName){
+    const base = (originalName || 'upload').replace(/\.[^/.]+$/, '');
+    const ascii = base.normalize('NFKD')
+      .replace(/[^\w.-]+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 40) || 'upload';
+    return ascii + '.jpg';
+  }
+
+  function blobToDataURL(blob){
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = reject;
+      r.readAsDataURL(blob);
+    });
+  }
+
+  function resizeToJpegBlob(file, maxSide, quality){
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        let w = img.naturalWidth || img.width;
+        let h = img.naturalHeight || img.height;
+        const scale = Math.min(1, maxSide / Math.max(w, h));
+        const nw = Math.max(1, Math.round(w * scale));
+        const nh = Math.max(1, Math.round(h * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = nw;
+        canvas.height = nh;
+        const ctx = canvas.getContext('2d', { alpha:false });
+        ctx.drawImage(img, 0, 0, nw, nh);
+        canvas.toBlob(
+          (blob) => blob ? resolve(blob) : reject(new Error('toBlob failed')),
+          'image/jpeg',
+          quality
+        );
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('Image decode failed'));
+      };
+
+      img.src = url;
+    });
+  }
+
+  async function fileToJpegBase64Obj(file){
+    const resizedBlob = await resizeToJpegBlob(file, MAX_SIDE, JPEG_QUALITY);
+    const dataUrl = await blobToDataURL(resizedBlob);
+    const base64 = String(dataUrl).split(',')[1];
+    return { base64, filename: asciiFilename(file.name), mime: 'image/jpeg' };
+  }
+
+  async function collectPayloadAndFiles(){
+    const discordId = document.getElementById('discordId').value.trim();
+    const contractType = ctSel.value.trim();
+
+    if (!discordId) throw new Error('Fill Discord ID');
+    if (!contractType) throw new Error('Select contract type');
+
+    const payload = { discordId, contractType, fields: {} };
+    let files = [];
+
+    if (contractType === 'активация'){
+      payload.fields.price = Number(document.getElementById('price').value);
+      const f = document.getElementById('filesMain').files[0];
+      if (!f) throw new Error('Активация: выбери скриншот');
+      files.push(await fileToJpegBase64Obj(f));
+    }
+    else if (contractType === 'дары-моря'){
+      payload.fields.fishType = document.getElementById('fishType').value.trim();
+      payload.fields.fishQty = Number(document.getElementById('fishQty').value);
+      const list = [...document.getElementById('filesMain').files];
+      if (!list.length) throw new Error('Дары моря: добавь хотя бы 1 скриншот');
+      for (const f of list) files.push(await fileToJpegBase64Obj(f));
+    }
+    else if (contractType === 'металлургия-сдача'){
+      payload.fields.oreType = document.getElementById('oreType').value;
+      const f = document.getElementById('filesMain').files[0];
+      if (!f) throw new Error('Металлургия сдача: выбери скриншот');
+      files.push(await fileToJpegBase64Obj(f));
+    }
+    else if (contractType === 'металлургия-добыча'){
+      payload.fields.iron = Number(document.getElementById('m_iron').value || 0);
+      payload.fields.silver = Number(document.getElementById('m_silver').value || 0);
+      payload.fields.copper = Number(document.getElementById('m_copper').value || 0);
+      payload.fields.tin = Number(document.getElementById('m_tin').value || 0);
+      payload.fields.gold = Number(document.getElementById('m_gold').value || 0);
+      const list = [...document.getElementById('filesMain').files];
+      if (!list.length) throw new Error('Металлургия добыча: добавь хотя бы 1 скриншот');
+      for (const f of list) files.push(await fileToJpegBase64Obj(f));
+    }
+    else if (contractType === 'товары'){
+      const f1 = document.getElementById('fileDelivery').files[0];
+      const f2 = document.getElementById('fileLoading').files[0];
+      if (!f1 && !f2) throw new Error('Товары: загрузи сдачу и/или погрузку');
+
+      const objs = { delivery: null, loading: null };
+      if (f1){ const o = await fileToJpegBase64Obj(f1); o.role='delivery'; objs.delivery = o; }
+      if (f2){ const o = await fileToJpegBase64Obj(f2); o.role='loading'; objs.loading = o; }
+
+      const order = selectionOrder.length ? selectionOrder : ['delivery','loading'];
+      order.forEach(r => { if (objs[r]) files.push(objs[r]); });
+
+      if (!files.length) {
+        if (objs.delivery) files.push(objs.delivery);
+        if (objs.loading) files.push(objs.loading);
+      }
+    }
+    else if (contractType === 'ателье'){
+      payload.fields.totalUniforms = Number(document.getElementById('atelierTotal').value || 0);
+      const list = [...document.getElementById('filesMain').files];
+      if (!list.length) throw new Error('Ателье: добавь хотя бы 1 скриншот');
+      for (const f of list) files.push(await fileToJpegBase64Obj(f));
+    }
+    else if (contractType === 'агитации-маркетплейс'){
+      const raw = document.getElementById('links').value;
+      const links = raw.split('\n').map(s => s.trim()).filter(Boolean);
+      if (!links.length) throw new Error('Маркетплейс: вставь хотя бы 1 ссылку');
+      payload.fields.links = links;
+    }
+    else if (contractType === 'агитации-wn'){
+      payload.fields.category = document.getElementById('wnCategory').value;
+      const list = [...document.getElementById('filesMain').files];
+      if (!list.length) throw new Error('Агитации WN: добавь хотя бы 1 скриншот');
+      for (const f of list) files.push(await fileToJpegBase64Obj(f));
+    }
+    else if (contractType === 'тюнинг'){
+      const f = document.getElementById('filesMain').files[0];
+      if (!f) throw new Error('Тюнинг: выбери скриншот');
+      files.push(await fileToJpegBase64Obj(f));
+    }
+
+    return { payload, files };
+  }
+
+  async function send(){
+    const btn = document.getElementById('sendBtn');
+    if (btn.disabled) return;
+  
+    const COOLDOWN_MS = 10000;
+    const originalText = btn.dataset.originalText || btn.textContent;
+    btn.dataset.originalText = originalText;
+  
+    btn.disabled = true;
+    setSending(true);
+  
+    function unlockNow(){
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  
+    function startCooldown(){
+      let left = Math.ceil(COOLDOWN_MS / 1000);
+      btn.disabled = true;
+      btn.textContent = originalText + ' (' + left + ')';
+  
+      const timer = setInterval(() => {
+        left -= 1;
+        if (left <= 0) {
+          clearInterval(timer);
+          btn.disabled = false;
+          btn.textContent = originalText;
+        } else {
+          btn.textContent = originalText + ' (' + left + ')';
+        }
+      }, 1000);
+    }
+  
+    try {
+      const collected = await collectPayloadAndFiles();
+  
+      const form = new FormData();
+      form.append('payload', JSON.stringify(collected.payload));
+      form.append('files_count', String(collected.files.length));
+  
+      collected.files.forEach((f, i) => {
+        const idx = String(i);
+        form.append('file_' + idx + '_base64', String(f.base64 || ''));
+        form.append('file_' + idx + '_filename', String(f.filename || ('upload_' + (i + 1) + '.jpg')));
+        form.append('file_' + idx + '_mime', String(f.mime || 'image/jpeg'));
+        form.append('file_' + idx + '_role', String(f.role || ''));
+      });
+  
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: form
+      });
+  
+      const raw = await res.text();
+  
+      let data = null;
+      try {
+        data = raw ? JSON.parse(raw) : null;
+      } catch (e) {
+        throw new Error('Сервер вернул не JSON: ' + raw.slice(0, 300));
+      }
+  
+      if (res.ok && data && data.ok) {
+        setOut('', true);
+        startCooldown();
+      } else {
+        setOut((data && (data.error || data.body)) || ('HTTP ' + res.status), false);
+        unlockNow();
+      }
+    } catch(e){
+      console.error('SEND ERROR:', e);
+      setOut(e && e.message ? e.message : String(e), false);
+      unlockNow();
+    }
+  }
+
+  document.getElementById('sendBtn').addEventListener('click', send);
+  setOut('', null);
+})();
+</script>
+</body>
+</html>`;

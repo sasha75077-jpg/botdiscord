@@ -1,0 +1,10 @@
+# Cloudflare Pages Deployment Configuration
+
+# Build command
+npm run build
+
+# Build output directory
+dist
+
+# Environment variables (set in Cloudflare dashboard)
+VITE_API_URL=https://your-backend-api.com/api

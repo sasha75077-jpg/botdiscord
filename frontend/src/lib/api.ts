@@ -1,0 +1,135 @@
+import axios from 'axios';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+
+export const api = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Interceptor для добавления токена
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('access_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Interceptor для обработки ошибок авторизации
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+
+      try {
+        const refreshToken = localStorage.getItem('refresh_token');
+        if (!refreshToken) {
+          throw new Error('No refresh token');
+        }
+
+        const { data } = await axios.post(`${API_BASE_URL}/auth/refresh`, {
+          refresh_token: refreshToken,
+        });
+
+        localStorage.setItem('access_token', data.access_token);
+        localStorage.setItem('refresh_token', data.refresh_token);
+
+        originalRequest.headers.Authorization = `Bearer ${data.access_token}`;
+        return api(originalRequest);
+      } catch (refreshError) {
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        window.location.href = '/login';
+        return Promise.reject(refreshError);
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+// Auth API
+export const authApi = {
+  ownerLogin: (email: string, password: string) =>
+    api.post('/auth/owner/login', { email, password }),
+
+  getDiscordOAuthUrl: (guildId?: string) =>
+    api.post('/auth/discord/login', null, { params: { guild_id: guildId } }),
+
+  discordCallback: (code: string, guildId?: string) =>
+    api.post('/auth/discord/callback', { code, guild_id: guildId }),
+
+  refreshToken: (refreshToken: string) =>
+    api.post('/auth/refresh', { refresh_token: refreshToken }),
+
+  getCurrentUser: () => api.get('/auth/me'),
+};
+
+// Guilds API
+export const guildsApi = {
+  list: () => api.get('/guilds/'),
+  get: (guildId: string) => api.get(`/guilds/${guildId}`),
+  getSettings: (guildId: string) => api.get(`/guilds/${guildId}/settings`),
+  updateSettings: (guildId: string, settings: Record<string, string>) =>
+    api.put(`/guilds/${guildId}/settings`, { settings }),
+  getModules: (guildId: string) => api.get(`/guilds/${guildId}/modules`),
+  toggleModule: (guildId: string, moduleName: string, isEnabled: boolean) =>
+    api.put(`/guilds/${guildId}/modules/${moduleName}`, null, {
+      params: { is_enabled: isEnabled },
+    }),
+};
+
+// Contracts API
+export const contractsApi = {
+  list: (guildId: string, params?: any) =>
+    api.get(`/guilds/${guildId}/contracts/`, { params }),
+  get: (guildId: string, contractId: number) =>
+    api.get(`/guilds/${guildId}/contracts/${contractId}`),
+  update: (guildId: string, contractId: number, data: any) =>
+    api.put(`/guilds/${guildId}/contracts/${contractId}`, data),
+  delete: (guildId: string, contractId: number) =>
+    api.delete(`/guilds/${guildId}/contracts/${contractId}`),
+  stats: (guildId: string) => api.get(`/guilds/${guildId}/contracts/stats`),
+};
+
+// Users API
+export const usersApi = {
+  getMe: (guildId: string) => api.get(`/guilds/${guildId}/users/me`),
+  get: (guildId: string, discordId: string) =>
+    api.get(`/guilds/${guildId}/users/${discordId}`),
+  getStats: (guildId: string, discordId: string) =>
+    api.get(`/guilds/${guildId}/users/${discordId}/stats`),
+  list: (guildId: string) => api.get(`/guilds/${guildId}/users/`),
+};
+
+// Reports API
+export const reportsApi = {
+  listBonus: (guildId: string, params?: any) =>
+    api.get(`/guilds/${guildId}/reports/bonus`, { params }),
+  getBonus: (guildId: string, reportId: number) =>
+    api.get(`/guilds/${guildId}/reports/bonus/${reportId}`),
+  approveBonus: (guildId: string, reportId: number, data: any) =>
+    api.put(`/guilds/${guildId}/reports/bonus/${reportId}/approve`, data),
+  listPromotion: (guildId: string, params?: any) =>
+    api.get(`/guilds/${guildId}/reports/promotion`, { params }),
+};
+
+// Permissions API
+export const permissionsApi = {
+  list: (guildId: string) =>
+    api.get(`/api/guilds/${guildId}/permissions`),
+  assign: (guildId: string, discordId: string, role: string) =>
+    api.post(`/api/guilds/${guildId}/permissions`, { discord_id: discordId, role }),
+  remove: (guildId: string, discordId: string) =>
+    api.delete(`/api/guilds/${guildId}/permissions/${discordId}`),
+  getMyRole: (guildId: string) =>
+    api.get(`/api/guilds/${guildId}/permissions/me`),
+};
+
+export default api;
