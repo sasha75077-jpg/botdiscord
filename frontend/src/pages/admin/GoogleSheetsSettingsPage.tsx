@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { guildsApi } from '@/lib/api';
@@ -37,13 +37,15 @@ export default function GoogleSheetsSettingsPage() {
       return data;
     },
     enabled: !!guildId,
-    onSuccess: (data) => {
-      if (data?.settings) {
-        setSheetId(data.settings.sheet_id || '');
-        setSheetsEnabled(data.settings.sheets_enabled === 'True');
-      }
-    },
   });
+
+  // Update state when settings load
+  useEffect(() => {
+    if (settings?.settings) {
+      setSheetId(settings.settings.sheet_id || '');
+      setSheetsEnabled(settings.settings.sheets_enabled === 'True');
+    }
+  }, [settings]);
 
   // Получить информацию о сервере
   const { data: guild } = useQuery({
@@ -137,7 +139,7 @@ export default function GoogleSheetsSettingsPage() {
       }
 
       setSuccess('Настройки успешно сохранены!');
-      queryClient.invalidateQueries(['guild-settings', guildId]);
+      queryClient.invalidateQueries({ queryKey: ['guild-settings', guildId] });
 
       // Редирект через 2 секунды
       setTimeout(() => {

@@ -28,7 +28,8 @@ export const useWebSocket = (guildId: string | null, onMessage?: (message: WebSo
           }
         }, 30000);
 
-        ws.current.addEventListener('close', () => {
+        const currentWs = ws.current;
+        currentWs.addEventListener('close', () => {
           clearInterval(pingInterval);
         });
       };
