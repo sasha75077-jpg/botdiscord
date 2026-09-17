@@ -8,7 +8,7 @@ interface WebSocketMessage {
 export const useWebSocket = (guildId: string | null, onMessage?: (message: WebSocketMessage) => void) => {
   const [isConnected, setIsConnected] = useState(false);
   const ws = useRef<WebSocket | null>(null);
-  const reconnectTimeout = useRef<NodeJS.Timeout>();
+  const reconnectTimeout = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     if (!guildId) return;
