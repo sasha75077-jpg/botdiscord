@@ -98,12 +98,18 @@ async def discord_oauth_url(guild_id: str = None):
 
     return {"oauth_url": oauth_url}
 
-@router.post("/discord/callback", response_model=TokenResponse)
+@router.get("/discord/callback", response_model=TokenResponse)
 async def discord_oauth_callback(
-    callback: DiscordAuthCallback,
+    code: str,
+    state: str = "none",
     db: Database = Depends(get_db)
 ):
     """Discord OAuth2 callback"""
+
+    # Парсить guild_id из state
+    guild_id = None
+    if state and state.startswith("guild:") and state != "guild:none":
+        guild_id = state.split(":", 1)[1]
 
     # Обменять code на access_token
     async with httpx.AsyncClient() as client:
@@ -113,7 +119,7 @@ async def discord_oauth_callback(
                 "client_id": settings.DISCORD_CLIENT_ID,
                 "client_secret": settings.DISCORD_CLIENT_SECRET,
                 "grant_type": "authorization_code",
-                "code": callback.code,
+                "code": code,
                 "redirect_uri": settings.DISCORD_REDIRECT_URI,
             },
             headers={"Content-Type": "application/x-www-form-urlencoded"}
@@ -149,12 +155,12 @@ async def discord_oauth_callback(
         user_guilds = guilds_response.json()
 
     # Если guild_id указан, проверить что пользователь на этом сервере
-    if callback.guild_id:
+    if guild_id:
         guild_ids = [g["id"] for g in user_guilds]
-        if callback.guild_id not in guild_ids:
+        if guild_id not in guild_ids:
             raise HTTPException(status_code=403, detail="You are not a member of this guild")
 
-        target_guild_id = callback.guild_id
+        target_guild_id = guild_id
     else:
         # Найти первый зарегистрированный сервер
         registered_guilds = await db.fetch_all(
