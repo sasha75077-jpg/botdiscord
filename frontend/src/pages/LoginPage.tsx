@@ -37,7 +37,7 @@ export default function LoginPage() {
 
     try {
       const { data } = await authApi.getDiscordOAuthUrl();
-      window.location.href = data.oauth_url;
+      window.location.href = data.url;
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Ошибка получения Discord OAuth URL');
       setLoading(false);
