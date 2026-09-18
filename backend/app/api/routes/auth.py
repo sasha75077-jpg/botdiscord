@@ -60,9 +60,28 @@ async def owner_login(
         refresh_token=refresh_token
     )
 
+@router.get("/discord/url")
+async def get_discord_oauth_url(guild_id: str = None):
+    """Получить URL для Discord OAuth2"""
+    scope = "identify guilds email"
+    redirect_uri = settings.DISCORD_REDIRECT_URI
+
+    state = f"guild:{guild_id}" if guild_id else "none"
+
+    oauth_url = (
+        f"{settings.DISCORD_API_ENDPOINT}/oauth2/authorize"
+        f"?client_id={settings.DISCORD_CLIENT_ID}"
+        f"&redirect_uri={redirect_uri}"
+        f"&response_type=code"
+        f"&scope={scope}"
+        f"&state={state}"
+    )
+
+    return {"url": oauth_url}
+
 @router.post("/discord/login")
 async def discord_oauth_url(guild_id: str = None):
-    """Получить URL для Discord OAuth2"""
+    """Получить URL для Discord OAuth2 (legacy)"""
     scope = "identify guilds"
     redirect_uri = settings.DISCORD_REDIRECT_URI
 
