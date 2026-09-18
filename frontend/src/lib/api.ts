@@ -60,7 +60,7 @@ export const authApi = {
     api.post('/auth/owner/login', { email, password }),
 
   getDiscordOAuthUrl: (guildId?: string) =>
-    api.post('/auth/discord/login', null, { params: { guild_id: guildId } }),
+    api.get('/auth/discord/url', { params: { guild_id: guildId } }),
 
   discordCallback: (code: string, guildId?: string) =>
     api.post('/auth/discord/callback', { code, guild_id: guildId }),
