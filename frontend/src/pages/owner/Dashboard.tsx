@@ -115,7 +115,7 @@ export default function OwnerDashboard() {
             {guilds?.map((guild: any) => (
               <Link
                 key={guild.guild_id}
-                to={`/guilds/${guild.guild_id}`}
+                to={`/guilds/${guild.guild_id}/roles`}
                 className="block"
               >
                 <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-dark-700 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-600 transition-colors cursor-pointer">

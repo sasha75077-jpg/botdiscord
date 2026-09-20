@@ -5,6 +5,7 @@ import { guildsRoutes } from './routes/guilds'
 import { contractsRoutes } from './routes/contracts'
 import { usersRoutes } from './routes/users'
 import { permissionsRoutes } from './routes/permissions'
+import { logsRoutes } from './routes/logs'
 
 export interface Env {
   DB: D1Database
@@ -18,6 +19,7 @@ export interface Env {
   OWNER_PASSWORD: string
   DISCORD_API_ENDPOINT: string
   FRONTEND_URL: string
+  SYNC_SECRET?: string
 }
 
 const app = new Hono<{ Bindings: Env }>()
@@ -43,5 +45,6 @@ app.route('/permissions', permissionsRoutes)
 app.route('/guilds', contractsRoutes)
 app.route('/guilds', usersRoutes)
 app.route('/guilds', permissionsRoutes)
+app.route('/guilds', logsRoutes)
 
 export default app

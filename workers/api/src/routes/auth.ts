@@ -18,7 +18,7 @@ async function createToken(payload: any, secret: string, expiresIn: string) {
   return jwt
 }
 
-async function verifyToken(token: string, secret: string) {
+export async function verifyToken(token: string, secret: string) {
   try {
     const encoder = new TextEncoder()
     const secretKey = encoder.encode(secret)
@@ -27,6 +27,16 @@ async function verifyToken(token: string, secret: string) {
   } catch {
     return null
   }
+}
+
+// Пишущий доступ: JWT пользователя или сервисный ключ бота
+export async function requireWriter(c: any, env: Env): Promise<boolean> {
+  const header = c.req.header('Authorization')
+  if (!header?.startsWith('Bearer ')) return false
+  const token = header.substring(7)
+  if (env.SYNC_SECRET && token === env.SYNC_SECRET) return true
+  const payload = await verifyToken(token, env.SECRET_KEY)
+  return !!payload
 }
 
 // Hash password (simple SHA-256 for now)

@@ -237,6 +237,24 @@ async def insert_contract_if_new(row: dict):
             row.get("status", ""),
         ))
 
+    # Синхронизация с облачной панелью (не роняет бота при ошибке сети)
+    try:
+        from services.api_sync import queue_contract_sync
+        cur = await fetch_one(
+            "SELECT confirm_status, price FROM contracts WHERE guild_id=? AND ts=? AND discord_id=? AND contract_type=?",
+            (guild_id, row.get("ts"), row.get("discord_id"), row.get("contract_type"))
+        )
+        queue_contract_sync(
+            guild_id,
+            row.get("ts"),
+            row.get("discord_id"),
+            row.get("contract_type"),
+            price=((cur or {}).get("price") or row.get("price", 0)),
+            status=((cur or {}).get("confirm_status") or "PENDING"),
+        )
+    except Exception as e:
+        print(f"[api_sync] warn: {e}")
+
 
 async def get_setting(key: str, guild_id: str = None):
     """Получить настройку (для конкретного сервера или глобальную)"""

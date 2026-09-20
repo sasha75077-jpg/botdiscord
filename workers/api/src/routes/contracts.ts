@@ -28,6 +28,49 @@ contracts.get('/:guildId/contracts/', async (c) => {
   return c.json(result.results)
 })
 
+// POST /guilds/:guildId/contracts/sync - upsert от Discord-бота (по природному ключу).
+// Auth: Authorization: Bearer <SYNC_SECRET>
+contracts.post('/:guildId/contracts/sync', async (c) => {
+  const key = c.env.SYNC_SECRET
+  if (!key || c.req.header('Authorization') !== `Bearer ${key}`) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+
+  const guildId = c.req.param('guildId')
+  const body = await c.req.json<{
+    ts: string; discord_id: string; contract_type: string;
+    price?: number; nickname?: string; discord_username?: string; status?: string;
+  }>()
+
+  if (!body.ts || !body.discord_id || !body.contract_type) {
+    return c.json({ error: 'Missing ts, discord_id or contract_type' }, 400)
+  }
+
+  const st = (body.status || 'PENDING').toUpperCase()
+  const status = st === 'APPROVED' ? 'approved' : st === 'REJECTED' ? 'rejected' : 'pending'
+  const nick = body.nickname || body.discord_id
+
+  await c.env.DB.prepare(
+    'INSERT INTO users (discord_id, guild_id, discord_username) VALUES (?, ?, ?) ON CONFLICT(discord_id, guild_id) DO NOTHING'
+  ).bind(body.discord_id, guildId, body.discord_username || null).run()
+
+  const existing = await c.env.DB.prepare(
+    'SELECT id FROM contracts WHERE guild_id = ? AND created_at = ? AND discord_id = ? AND contract_type = ?'
+  ).bind(guildId, body.ts, body.discord_id, body.contract_type).first<{ id: number }>()
+
+  if (existing) {
+    await c.env.DB.prepare(
+      'UPDATE contracts SET price = ?, nickname = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    ).bind(body.price ?? 0, nick, status, existing.id).run()
+    return c.json({ id: existing.id, updated: true })
+  }
+
+  const res = await c.env.DB.prepare(
+    'INSERT INTO contracts (guild_id, discord_id, discord_username, contract_type, nickname, price, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(guildId, body.discord_id, body.discord_username || null, body.contract_type, nick, body.price ?? 0, status, body.ts).run()
+  return c.json({ id: res.meta.last_row_id, created: true })
+})
+
 // GET /guilds/:guildId/contracts/stats (must be before :contractId route)
 contracts.get('/:guildId/contracts/stats', async (c) => {
   const guildId = c.req.param('guildId')

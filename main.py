@@ -64,6 +64,9 @@ class MyBot(commands.Bot):
         await self.load_extension("cogs.settings")
         print("[LOADED] cogs.settings")
 
+        await self.load_extension("cogs.role_sync")
+        print("[LOADED] cogs.role_sync")
+
         self.add_view(PublicProfilePanelView())
 
         # Multi-guild: синхронизировать команды для всех серверов

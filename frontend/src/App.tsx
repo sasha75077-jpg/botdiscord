@@ -6,6 +6,7 @@ import LoginPage from '@/pages/LoginPage';
 import DiscordCallbackPage from '@/pages/DiscordCallbackPage';
 import OwnerDashboard from '@/pages/owner/Dashboard';
 import OwnerSettingsPage from '@/pages/owner/SettingsPage';
+import RolesPage from '@/pages/RolesPage';
 import AdminDashboard from '@/pages/admin/Dashboard';
 import GoogleSheetsSettingsPage from '@/pages/admin/GoogleSheetsSettingsPage';
 import UserDashboard from '@/pages/user/Dashboard';
@@ -37,6 +38,7 @@ function App() {
         <Routes>
           <Route path="/" element={<OwnerDashboard />} />
           <Route path="/owner/settings" element={<OwnerSettingsPage />} />
+          <Route path="/guilds/:guildId/roles" element={<RolesPage />} />
           <Route path="/guilds" element={<div>Guilds Management</div>} />
           <Route path="/guilds/:guildId" element={<div>Guild Details</div>} />
           <Route path="*" element={<Navigate to="/" replace />} />
@@ -53,6 +55,8 @@ function App() {
           <Route path="/" element={<AdminDashboard />} />
           <Route path="/guilds/:guildId" element={<AdminDashboard />} />
           <Route path="/guilds/:guildId/sheets" element={<GoogleSheetsSettingsPage />} />
+          <Route path="/guilds/:guildId/roles" element={<RolesPage />} />
+          <Route path="/roles" element={<RolesPage />} />
           <Route path="/contracts" element={<div>Contracts</div>} />
           <Route path="/contracts/new" element={<NewContractPage />} />
           <Route path="/reports" element={<div>Reports</div>} />

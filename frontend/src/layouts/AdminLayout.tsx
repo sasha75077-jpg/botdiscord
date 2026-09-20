@@ -11,6 +11,7 @@ import {
   Menu,
   X,
   ClipboardList,
+  Shield,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -28,6 +29,7 @@ export default function AdminLayout({ children }: Props) {
     { name: 'Контракты', href: '/contracts', icon: FileText },
     { name: 'Отчеты', href: '/reports', icon: ClipboardList },
     { name: 'Пользователи', href: '/users', icon: Users },
+    { name: 'Роли', href: '/roles', icon: Shield },
     { name: 'Настройки', href: '/settings', icon: Settings },
   ];
 

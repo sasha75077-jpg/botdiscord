@@ -86,6 +86,9 @@ export const guildsApi = {
     api.put(`/guilds/${guildId}/modules/${moduleName}`, null, {
       params: { is_enabled: isEnabled },
     }),
+  discordRoles: (guildId: string) => api.get(`/guilds/${guildId}/discord-roles`),
+  botLogs: (guildId: string, limit = 100) =>
+    api.get(`/guilds/${guildId}/bot-logs`, { params: { limit } }),
 };
 
 // Contracts API

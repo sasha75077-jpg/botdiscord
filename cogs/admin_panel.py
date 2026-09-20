@@ -3307,6 +3307,17 @@ async def approve_contract(interaction: discord.Interaction, contract_id: int):
         (admin_id, now, contract_id)
     )
 
+    # 1.0) синхронизация с панелью
+    try:
+        from services.api_sync import queue_contract_sync
+        queue_contract_sync(
+            contract.get("guild_id"), contract.get("ts"),
+            discord_id, contract_type,
+            price=contract.get("price", 0), status="APPROVED",
+        )
+    except Exception as e:
+        print(f"[api_sync] warn: {e}")
+
     # 1.1) обновляем счётчик ожидания
     row = await fetch_one("SELECT COUNT(*) AS cnt FROM contracts WHERE confirm_status='PENDING'", ())
     cnt = int(row["cnt"] or 0)
@@ -3452,6 +3463,17 @@ class RejectReasonModal(Modal, title="Причина отклонения"):
             "UPDATE contracts SET confirm_status='REJECTED', confirmed_by=?, confirmed_at=?, reject_reason=? WHERE id=?",
             (admin_id, now, reason, self.contract_id)
         )
+
+        # Синхронизация с панелью
+        try:
+            from services.api_sync import queue_contract_sync
+            queue_contract_sync(
+                contract.get("guild_id"), contract.get("ts"),
+                contract["discord_id"], contract["contract_type"],
+                price=contract.get("price", 0), status="REJECTED",
+            )
+        except Exception as e:
+            print(f"[api_sync] warn: {e}")
 
         row = await fetch_one("SELECT COUNT(*) AS cnt FROM contracts WHERE confirm_status='PENDING'", ())
         cnt = int(row["cnt"] or 0)
