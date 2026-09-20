@@ -89,6 +89,9 @@ guilds.put('/:guildId/settings', async (c) => {
   if (!isBot && role !== 'owner' && 'panel_admin_role_ids' in settings) {
     return c.json({ error: 'Only owner can bind admin role' }, 403)
   }
+  if (!isBot && role !== 'owner' && 'family_member_role_ids' in settings) {
+    return c.json({ error: 'Only owner can bind family role' }, 403)
+  }
 
   // Update each setting
   for (const [key, value] of Object.entries(settings)) {

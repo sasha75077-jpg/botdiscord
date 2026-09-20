@@ -117,7 +117,7 @@ auth.post('/discord/callback', async (c) => {
 
     const userGuilds = await guildsResponse.json<Array<{ id: string }>>()
 
-    let targetGuildId: string
+    let targetGuildId: string | null
 
     if (guild_id) {
       // Check user is in this guild
@@ -136,8 +136,19 @@ auth.post('/discord/callback', async (c) => {
       const userGuildIds = userGuilds.map(g => g.id)
       const commonGuilds = userGuildIds.filter(id => registeredGuildIds.includes(id))
 
+      // Незнакомец: ни одного общего сервера -> гостевая сессия (только витрина)
       if (commonGuilds.length === 0) {
-        return c.json({ error: 'You are not a member of any registered guild' }, 404)
+        const accessToken = await createToken(
+          { user_type: 'discord', discord_id: discordId, guild_id: null, role: 'stranger' },
+          c.env.SECRET_KEY,
+          '1h'
+        )
+        const refreshToken = await createToken(
+          { user_type: 'discord', discord_id: discordId, guild_id: null, role: 'stranger' },
+          c.env.SECRET_KEY,
+          '7d'
+        )
+        return c.json({ access_token: accessToken, refresh_token: refreshToken })
       }
 
       targetGuildId = commonGuilds[0]
@@ -262,34 +273,48 @@ auth.post('/refresh', async (c) => {
       '7d'
     )
   } else if (userType === 'discord') {
-    // Refresh role from DB
-    const permission = await c.env.DB.prepare(
-      'SELECT role FROM permissions WHERE discord_id = ? AND guild_id = ?'
-    ).bind(payload.discord_id as string, payload.guild_id as string)
-      .first<{ role: string }>()
+    // Гость без сервера остается гостем
+    if (!payload.guild_id) {
+      accessToken = await createToken(
+        { user_type: 'discord', discord_id: payload.discord_id, guild_id: null, role: 'stranger' },
+        c.env.SECRET_KEY,
+        '1h'
+      )
+      newRefreshToken = await createToken(
+        { user_type: 'discord', discord_id: payload.discord_id, guild_id: null, role: 'stranger' },
+        c.env.SECRET_KEY,
+        '7d'
+      )
+    } else {
+      // Refresh role from DB
+      const permission = await c.env.DB.prepare(
+        'SELECT role FROM permissions WHERE discord_id = ? AND guild_id = ?'
+      ).bind(payload.discord_id as string, payload.guild_id as string)
+        .first<{ role: string }>()
 
-    const role = permission?.role || 'user'
+      const role = permission?.role || 'user'
 
-    accessToken = await createToken(
-      {
-        user_type: 'discord',
-        discord_id: payload.discord_id,
-        guild_id: payload.guild_id,
-        role,
-      },
-      c.env.SECRET_KEY,
-      '1h'
-    )
-    newRefreshToken = await createToken(
-      {
-        user_type: 'discord',
-        discord_id: payload.discord_id,
-        guild_id: payload.guild_id,
-        role,
-      },
-      c.env.SECRET_KEY,
-      '7d'
-    )
+      accessToken = await createToken(
+        {
+          user_type: 'discord',
+          discord_id: payload.discord_id,
+          guild_id: payload.guild_id,
+          role,
+        },
+        c.env.SECRET_KEY,
+        '1h'
+      )
+      newRefreshToken = await createToken(
+        {
+          user_type: 'discord',
+          discord_id: payload.discord_id,
+          guild_id: payload.guild_id,
+          role,
+        },
+        c.env.SECRET_KEY,
+        '7d'
+      )
+    }
   } else {
     return c.json({ error: 'Invalid token payload' }, 400)
   }

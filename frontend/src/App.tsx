@@ -7,6 +7,8 @@ import DiscordCallbackPage from '@/pages/DiscordCallbackPage';
 import OwnerDashboard from '@/pages/owner/Dashboard';
 import OwnerSettingsPage from '@/pages/owner/SettingsPage';
 import RolesPage from '@/pages/RolesPage';
+import ShowcasePage from '@/pages/ShowcasePage';
+import ShowcaseManagePage from '@/pages/owner/ShowcaseManagePage';
 import AdminDashboard from '@/pages/admin/Dashboard';
 import GoogleSheetsSettingsPage from '@/pages/admin/GoogleSheetsSettingsPage';
 import UserDashboard from '@/pages/user/Dashboard';
@@ -33,6 +35,17 @@ function App() {
     );
   }
 
+  // Stranger: только витрина серверов
+  if (user?.role === 'stranger') {
+    return (
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/auth/callback" element={<DiscordCallbackPage />} />
+        <Route path="*" element={<ShowcasePage />} />
+      </Routes>
+    );
+  }
+
   // Owner routes
   if (user?.role === 'owner') {
     return (
@@ -40,6 +53,7 @@ function App() {
         <Routes>
           <Route path="/" element={<OwnerDashboard />} />
           <Route path="/owner/settings" element={<OwnerSettingsPage />} />
+          <Route path="/owner/showcase" element={<ShowcaseManagePage />} />
           <Route path="/guilds/:guildId/roles" element={<RolesPage />} />
           <Route path="/guilds" element={<div>Guilds Management</div>} />
           <Route path="/guilds/:guildId" element={<div>Guild Details</div>} />

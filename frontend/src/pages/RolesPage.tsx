@@ -63,6 +63,7 @@ export default function RolesPage() {
 
   const [adminIds, setAdminIds] = useState<string[]>([]);
   const [recruitIds, setRecruitIds] = useState<string[]>([]);
+  const [familyIds, setFamilyIds] = useState<string[]>([]);
   const [newDiscordId, setNewDiscordId] = useState('');
   const [newRole, setNewRole] = useState('recruiter');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -94,8 +95,10 @@ export default function RolesPage() {
 
   useEffect(() => {
     const s = settings?.settings || {};
-    setAdminIds((s.panel_admin_role_ids || '').split(',').map((x: string) => x.trim()).filter(Boolean));
-    setRecruitIds((s.panel_recruiter_role_ids || '').split(',').map((x: string) => x.trim()).filter(Boolean));
+    const split = (v: any) => String(v || '').split(',').map((x: string) => x.trim()).filter(Boolean);
+    setAdminIds(split(s.panel_admin_role_ids));
+    setRecruitIds(split(s.panel_recruiter_role_ids));
+    setFamilyIds(split(s.family_member_role_ids));
   }, [settings]);
 
   const toggle = (list: string[], setList: (v: string[]) => void, id: string) =>
@@ -104,7 +107,10 @@ export default function RolesPage() {
   const saveBindings = useMutation({
     mutationFn: async () => {
       const payload: Record<string, string> = {};
-      if (isOwner) payload.panel_admin_role_ids = adminIds.join(',');
+      if (isOwner) {
+        payload.panel_admin_role_ids = adminIds.join(',');
+        payload.family_member_role_ids = familyIds.join(',');
+      }
       payload.panel_recruiter_role_ids = recruitIds.join(',');
       await guildsApi.updateSettings(guildId!, payload);
     },
@@ -191,6 +197,19 @@ export default function RolesPage() {
           />
         </div>
       </div>
+      {isOwner && (
+        <div className="card">
+          <h2 className="text-xl font-bold mb-1">Член семьи (FAMQ)</h2>
+          <p className="text-sm text-gray-500 mb-3">
+            У кого эти роли — уже в семье, заявку подать не сможет (ни с сайта, ни из Discord).
+          </p>
+          <RoleChecklist
+            roles={discordRoles || []}
+            selected={familyIds}
+            onToggle={(id) => toggle(familyIds, setFamilyIds, id)}
+          />
+        </div>
+      )}
       <button onClick={() => saveBindings.mutate()} disabled={saveBindings.isPending} className="btn btn-primary">
         {saveBindings.isPending ? 'Сохранение...' : 'Сохранить привязки'}
       </button>

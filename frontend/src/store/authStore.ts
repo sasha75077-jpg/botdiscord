@@ -7,7 +7,7 @@ interface User {
   discord_id?: string;
   username?: string;
   guild_id?: string;
-  role: 'owner' | 'admin' | 'recruiter' | 'user';
+  role: 'owner' | 'admin' | 'recruiter' | 'user' | 'stranger';
 }
 
 interface AuthState {

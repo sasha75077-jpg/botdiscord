@@ -8,6 +8,7 @@ import {
   LogOut,
   Menu,
   X,
+  Megaphone,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -23,6 +24,7 @@ export default function OwnerLayout({ children }: Props) {
   const navigation = [
     { name: 'Дашборд', href: '/', icon: LayoutDashboard },
     { name: 'Серверы', href: '/guilds', icon: Server },
+    { name: 'Витрина', href: '/owner/showcase', icon: Megaphone },
     { name: 'Настройки', href: '/settings', icon: Settings },
   ];
 

@@ -156,4 +156,12 @@ export const permissionsApi = {
     api.get(`/guilds/${guildId}/permissions/me`),
 };
 
+// Showcase API (публичная витрина серверов)
+export const showcaseApi = {
+  list: (all = false) => api.get('/showcase', { params: all ? { all: 1 } : {} }),
+  create: (data: any) => api.post('/showcase', data),
+  update: (id: number, data: any) => api.put(`/showcase/${id}`, data),
+  remove: (id: number) => api.delete(`/showcase/${id}`),
+};
+
 export default api;

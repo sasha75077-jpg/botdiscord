@@ -242,6 +242,15 @@ class ApplicationModal(discord.ui.Modal):
         guild = interaction.guild
         if guild is None:
             return await interaction.response.send_message("❌ Только на сервере.", ephemeral=True)
+        try:
+            fam_raw = await get_setting("family_member_role_ids", str(guild.id)) or ""
+            fam_ids = {x.strip() for x in fam_raw.split(",") if x.strip().isdigit()}
+            if fam_ids and isinstance(interaction.user, discord.Member):
+                if any(str(r.id) in fam_ids for r in interaction.user.roles):
+                    return await interaction.response.send_message(
+                        "❌ Ты уже состоишь в семье — заявка не нужна.", ephemeral=True)
+        except Exception:
+            pass
         answers: dict = {}
         for q, inp in self.inputs:
             v = (inp.value or "").strip()

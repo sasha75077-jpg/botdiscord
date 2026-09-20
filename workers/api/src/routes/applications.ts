@@ -108,11 +108,43 @@ apps.get('/:guildId/applications/:id', async (c) => {
   return c.json(await withPeople(c.env, row))
 })
 
-// POST /guilds/:guildId/applications - подать заявку (любой залогиненный)
+// Проверка: участник сервера + не член семьи (роль family)
+async function checkApplicant(env: Env, guildId: string, discordId: string): Promise<string | null> {
+  const member = await env.DB.prepare(
+    'SELECT 1 FROM users WHERE discord_id = ? AND guild_id = ? UNION SELECT 1 FROM permissions WHERE discord_id = ? AND guild_id = ? LIMIT 1'
+  ).bind(discordId, guildId, discordId, guildId).first()
+  if (!member) return 'Подавать заявку могут только участники сервера'
+
+  const famRow = await env.DB.prepare(
+    "SELECT setting_value FROM guild_settings WHERE guild_id = ? AND setting_key = 'family_member_role_ids'"
+  ).bind(guildId).first<{ setting_value: string }>()
+  const famIds = (famRow?.setting_value || '').split(',').map((s) => s.trim()).filter(Boolean)
+  if (famIds.length === 0) return null
+
+  try {
+    const resp = await fetch(`${env.DISCORD_API_ENDPOINT}/guilds/${guildId}/members/${discordId}`, {
+      headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` },
+    })
+    if (!resp.ok) return null // не смогли проверить - не блокируем
+    const data = await resp.json<{ roles: string[] }>()
+    if ((data.roles || []).some((r) => famIds.includes(r))) {
+      return 'Ты уже состоишь в семье'
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
+// POST /guilds/:guildId/applications - подать заявку (участник, не член семьи)
 apps.post('/:guildId/applications', async (c) => {
   const guildId = c.req.param('guildId')
   const u = await me(c, c.env)
   if (!u || !u.discord_id) return c.json({ error: 'Forbidden' }, 403)
+  if (u.user_type !== 'owner') {
+    const block = await checkApplicant(c.env, guildId, u.discord_id)
+    if (block) return c.json({ error: block }, 403)
+  }
 
   const body = await c.req.json<{ answers?: Record<string, string> }>()
   const answers = body.answers || {}
