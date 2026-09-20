@@ -14,6 +14,8 @@ class RoleSync(commands.Cog):
             self.reconcile_loop.start()
         if not self.contracts_poll_loop.is_running():
             self.contracts_poll_loop.start()
+        if not self.contracts_nudge_loop.is_running():
+            self.contracts_nudge_loop.start()
 
     @tasks.loop(minutes=10)
     async def reconcile_loop(self):
@@ -34,12 +36,23 @@ class RoleSync(commands.Cog):
     @tasks.loop(seconds=60)
     async def contracts_poll_loop(self):
         try:
-            await rs.poll_site_contracts()
+            await rs.poll_site_contracts(self.bot)
         except Exception as e:
             print(f"[contracts-poll] warn: {e}")
 
     @contracts_poll_loop.before_loop
     async def _before_contracts_poll(self):
+        await self.bot.wait_until_ready()
+
+    @tasks.loop(minutes=10)
+    async def contracts_nudge_loop(self):
+        try:
+            await rs.nudge_site_contracts(self.bot)
+        except Exception as e:
+            print(f"[contracts-nudge] warn: {e}")
+
+    @contracts_nudge_loop.before_loop
+    async def _before_contracts_nudge(self):
         await self.bot.wait_until_ready()
 
     @commands.Cog.listener()

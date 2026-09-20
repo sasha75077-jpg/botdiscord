@@ -18,6 +18,7 @@ import ApplicationsPage from '@/pages/applications/ApplicationsPage';
 import ApplicationDetailPage from '@/pages/applications/ApplicationDetailPage';
 import ContractsPage from '@/pages/contracts/ContractsPage';
 import ContractDetailPage from '@/pages/contracts/ContractDetailPage';
+import NotificationsPage from '@/pages/admin/NotificationsPage';
 
 // Layouts
 import OwnerLayout from '@/layouts/OwnerLayout';
@@ -83,6 +84,7 @@ function App() {
           <Route path="/applications/:id" element={<ApplicationDetailPage />} />
           <Route path="/reports" element={<div>Reports</div>} />
           <Route path="/users" element={<div>Users</div>} />
+          <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/settings" element={<div>Settings</div>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

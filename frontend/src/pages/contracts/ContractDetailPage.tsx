@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { contractsApi } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
-import { ArrowLeft, CheckCircle, XCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Hand } from 'lucide-react';
 
 export default function ContractDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -13,6 +13,7 @@ export default function ContractDetailPage() {
   const guildId = user?.guild_id || '';
   const isOwner = user?.role === 'owner';
   const isAdmin = isOwner || user?.role === 'admin';
+  const isStaff = isAdmin || user?.role === 'recruiter';
   const [notes, setNotes] = useState('');
   const [msg, setMsg] = useState('');
 
@@ -30,6 +31,11 @@ export default function ContractDetailPage() {
   const decide = useMutation({
     mutationFn: (status: string) =>
       contractsApi.update(guildId, contractId, { status, admin_notes: notes || undefined }),
+    onSuccess: invalidate,
+    onError: (e: any) => setMsg(e.response?.data?.error || 'Ошибка'),
+  });
+  const claim = useMutation({
+    mutationFn: () => contractsApi.claim(guildId, contractId),
     onSuccess: invalidate,
     onError: (e: any) => setMsg(e.response?.data?.error || 'Ошибка'),
   });
@@ -62,6 +68,7 @@ export default function ContractDetailPage() {
           <p><span className="text-gray-500">Отправитель:</span> <span className="font-mono">{ct.nickname || ct.discord_id}</span></p>
           <p><span className="text-gray-500">Дата:</span> {ct.created_at}</p>
           {ct.price ? <p><span className="text-gray-500">Сумма:</span> {ct.price}</p> : null}
+          {ct.claimed_by ? <p><span className="text-gray-500">Взял:</span> <span className="font-mono">{ct.claimed_by}</span></p> : null}
           {ct.admin_notes ? <p><span className="text-gray-500">Заметка:</span> {ct.admin_notes}</p> : null}
         </div>
 
@@ -76,7 +83,15 @@ export default function ContractDetailPage() {
           </div>
         )}
 
-        {isAdmin && ct.status === 'pending' && (
+        {isStaff && ct.status === 'pending' && !ct.claimed_by && (
+          <div className="mt-4">
+            <button onClick={() => claim.mutate()} disabled={claim.isPending} className="btn btn-primary flex items-center gap-2">
+              <Hand size={18} /> Взять
+            </button>
+          </div>
+        )}
+
+        {isAdmin && ct.status === 'pending' && ct.claimed_by && (
           <div className="flex flex-wrap gap-2 mt-4">
             <input
               value={notes}

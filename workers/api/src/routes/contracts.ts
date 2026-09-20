@@ -184,7 +184,33 @@ contracts.get('/:guildId/contracts/:contractId', async (c) => {
   return c.json(contract)
 })
 
-// PUT /guilds/:guildId/contracts/:contractId (admin/owner: approve/reject)
+// POST /guilds/:guildId/contracts/:contractId/claim - взять (staff, можно перезабрать)
+contracts.post('/:guildId/contracts/:contractId/claim', async (c) => {
+  const guildId = c.req.param('guildId')
+  const contractId = c.req.param('contractId')
+  const who = await caller(c, c.env)
+  if (!who || !who.discord_id) return c.json({ error: 'Forbidden' }, 403)
+  if (who.role !== 'owner' && !['admin', 'recruiter'].includes(who.role)) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+  if (who.role !== 'owner' && who.guild_id !== guildId) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+
+  const row: any = await c.env.DB.prepare(
+    'SELECT * FROM contracts WHERE id = ? AND guild_id = ?'
+  ).bind(contractId, guildId).first()
+  if (!row) return c.json({ error: 'Contract not found' }, 404)
+  if (row.status !== 'pending') return c.json({ error: 'Контракт уже обработан' }, 409)
+
+  await c.env.DB.prepare(
+    'UPDATE contracts SET claimed_by = ?, claimed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+  ).bind(who.discord_id, contractId).run()
+  const updated = await c.env.DB.prepare('SELECT * FROM contracts WHERE id = ?')
+    .bind(contractId).first()
+  return c.json(updated)
+})
+// PUT /guilds/:guildId/contracts/:contractId (admin/owner: approve/reject, только взятые)
 contracts.put('/:guildId/contracts/:contractId', async (c) => {
   const guildId = c.req.param('guildId')
   const contractId = c.req.param('contractId')
@@ -195,6 +221,15 @@ contracts.put('/:guildId/contracts/:contractId', async (c) => {
     }
   }
   const data = await c.req.json<any>()
+  if (data.status) {
+    const row: any = await c.env.DB.prepare(
+      'SELECT claimed_by FROM contracts WHERE id = ? AND guild_id = ?'
+    ).bind(contractId, guildId).first()
+    if (!row) return c.json({ error: 'Contract not found' }, 404)
+    if (!row.claimed_by) {
+      return c.json({ error: 'Сначала возьми контракт' }, 409)
+    }
+  }
 
   const updates: string[] = []
   const params: any[] = []

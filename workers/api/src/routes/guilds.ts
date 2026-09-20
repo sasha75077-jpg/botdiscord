@@ -162,4 +162,38 @@ guilds.get('/:guildId/discord-roles', async (c) => {
   })
 })
 
+// GET /guilds/:guildId/discord-channels - текстовые каналы (для выбора логов)
+guilds.get('/:guildId/discord-channels', async (c) => {
+  const header = c.req.header('Authorization')
+  if (!header?.startsWith('Bearer ')) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+  const token = header.substring(7)
+  const isBot = !!c.env.SYNC_SECRET && token === c.env.SYNC_SECRET
+  if (!isBot) {
+    const payload: any = await verifyToken(token, c.env.SECRET_KEY)
+    if (!payload || (payload.role !== 'owner' && payload.role !== 'admin')) {
+      return c.json({ error: 'Admin access required' }, 403)
+    }
+  }
+
+  if (!c.env.DISCORD_BOT_TOKEN) {
+    return c.json({ error: 'Discord bot token not configured' }, 502)
+  }
+
+  const guildId = c.req.param('guildId')
+  const resp = await fetch(`${c.env.DISCORD_API_ENDPOINT}/guilds/${guildId}/channels`, {
+    headers: { Authorization: `Bot ${c.env.DISCORD_BOT_TOKEN}` },
+  })
+  if (!resp.ok) {
+    return c.json({ error: 'Failed to fetch Discord channels' }, 502)
+  }
+  const channels = await resp.json<Array<{ id: string; name: string; type: number; parent_id?: string }>>()
+  return c.json({
+    channels: channels
+      .filter((ch) => ch.type === 0 || ch.type === 5)
+      .map((ch) => ({ id: ch.id, name: ch.name, type: ch.type })),
+  })
+})
+
 export const guildsRoutes = guilds

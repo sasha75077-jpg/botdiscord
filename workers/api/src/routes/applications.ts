@@ -200,10 +200,8 @@ apps.post('/:guildId/applications/:id/claim', async (c) => {
   ).bind(id, guildId).first()
   if (!row) return c.json({ error: 'Not found' }, 404)
   if (row.status !== 'pending') return c.json({ error: 'Заявка уже закрыта' }, 409)
-  if (row.claimed_by && row.claimed_by !== u.discord_id) {
-    return c.json({ error: 'Заявку уже взял другой' }, 409)
-  }
 
+  // Взять можно и чужую (перехват), запрет только на закрытые
   await c.env.DB.prepare(
     'UPDATE applications SET claimed_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
   ).bind(u.discord_id, id).run()
@@ -226,6 +224,9 @@ apps.post('/:guildId/applications/:id/decide', async (c) => {
   ).bind(id, guildId).first()
   if (!row) return c.json({ error: 'Not found' }, 404)
   if (row.status !== 'pending') return c.json({ error: 'Заявка уже закрыта' }, 409)
+  if (!row.claimed_by) {
+    return c.json({ error: 'Сначала возьми заявку' }, 409)
+  }
 
   await c.env.DB.prepare(
     'UPDATE applications SET status = ?, decided_by = ?, admin_notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'

@@ -279,11 +279,67 @@ async def reconcile_guild(bot, guild):
 SITE_TO_LOCAL_STATUS = {"pending": "PENDING", "approved": "APPROVED", "rejected": "REJECTED"}
 
 
-async def poll_site_contracts():
-    """Забрать контракты с сайта в локальную БД (новые + решения).
+async def nudge_site_contracts(bot):
+    """Напомнить взявшим контракты без решения (10+ минут)."""
+    if bot is None:
+        return
+    try:
+        rows = await fetch_all(
+            "SELECT * FROM contracts WHERE confirm_status = 'PENDING' "
+            "AND claimed_by IS NOT NULL AND claimed_by != '' AND nudged_at IS NULL "
+            "AND site_id IS NOT NULL"
+        )
+    except Exception as e:
+        print(f"[contracts-nudge] warn fetch: {e}")
+        return
+    from datetime import datetime as _dt, timezone as _tz
+    now = _dt.now(_tz.utc)
+    for r in rows:
+        try:
+            ts = _parse_ts(r.get("claimed_at"))
+            if not ts or (now - ts).total_seconds() < 600:
+                continue
+            guild = bot.get_guild(int(r["guild_id"]))
+            if guild is None:
+                continue
+            cfg = await fetch_all(
+                "SELECT setting_key, setting_value FROM guild_settings WHERE guild_id = ? AND setting_key = 'contracts_log_channel_id'",
+                (str(r["guild_id"]),),
+            )
+            ch_id = (cfg[0]["setting_value"] if cfg else "") or ""
+            if not ch_id.strip().isdigit():
+                continue
+            channel = guild.get_channel(int(ch_id))
+            if channel is None:
+                try:
+                    channel = await guild.fetch_channel(int(ch_id))
+                except Exception:
+                    continue
+            link = f"https://botdiscord-87a.pages.dev/contracts/{r['site_id']}"
+            await channel.send(
+                f"⏰ <@{r['claimed_by']}> ты взял контракт #{r['site_id']} 10 минут назад, но решения нет.\n{link}")
+            await execute("UPDATE contracts SET nudged_at = CURRENT_TIMESTAMP WHERE id = ?",
+                          (r["id"],))
+        except Exception as e:
+            print(f"[contracts-nudge] warn: {e}")
 
-    Зеркалит только статус confirm_status (без пересчета промо-кредитов).
-    """
+
+def _parse_ts(s):
+    if not s:
+        return None
+    from datetime import datetime as _dt, timezone as _tz
+    t = str(s).strip().replace('Z', '+00:00')
+    try:
+        dt = _dt.fromisoformat(t)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_tz.utc)
+    return dt
+
+
+async def poll_site_contracts(bot=None):
+    """Забрать контракты с сайта в локальную БД (новые + решения)."""
     if not SYNC_SECRET:
         return
     try:
@@ -294,12 +350,12 @@ async def poll_site_contracts():
     for g in guilds:
         gid = str(g["guild_id"])
         try:
-            await _poll_guild_contracts(gid)
+            await _poll_guild_contracts(bot, gid)
         except Exception as e:
             print(f"[contracts-poll] warn {gid}: {e}")
 
 
-async def _poll_guild_contracts(guild_id: str):
+async def _poll_guild_contracts(bot, guild_id: str):
     cursor = await get_setting("contracts_poll_cursor", guild_id) or "1970-01-01 00:00:00"
     try:
         data = await asyncio.to_thread(
@@ -314,14 +370,14 @@ async def _poll_guild_contracts(guild_id: str):
             ts = str(r.get("updated_at") or r.get("created_at") or "")
             if ts > newest:
                 newest = ts
-            await _mirror_site_contract(guild_id, r)
+            await _mirror_site_contract(bot, guild_id, r)
         except Exception as e:
             print(f"[contracts-poll] warn row: {e}")
     if newest != cursor:
         await set_setting("contracts_poll_cursor", newest, guild_id)
 
 
-async def _mirror_site_contract(guild_id: str, r: dict):
+async def _mirror_site_contract(bot, guild_id: str, r: dict):
     site_id = r.get("id")
     if not site_id:
         return
@@ -333,13 +389,13 @@ async def _mirror_site_contract(guild_id: str, r: dict):
         details = r.get("details")
         await execute(
             """INSERT INTO contracts
-               (guild_id, ts, discord_id, contract_type, price, details, confirm_status, source_status, site_id)
-               VALUES (?, ?, ?, ?, ?, ?, 'PENDING', 'SITE', ?)""",
+               (guild_id, ts, discord_id, contract_type, price, details, confirm_status, source_status, site_id, claimed_by, claimed_at)
+               VALUES (?, ?, ?, ?, ?, ?, 'PENDING', 'SITE', ?, ?, ?)""",
             (guild_id, r.get("created_at"), str(r.get("discord_id")),
              str(r.get("contract_type")),
              float(r.get("price") or 0),
              json.dumps(details, ensure_ascii=False) if details else None,
-             site_id),
+             site_id, r.get("claimed_by"), r.get("claimed_at")),
         )
         try:
             await execute(
@@ -348,9 +404,63 @@ async def _mirror_site_contract(guild_id: str, r: dict):
             )
         except Exception:
             pass
+        await _post_contract_log(bot, guild_id, r)
         return
+    updates = []
     if (local.get("confirm_status") or "PENDING") == "PENDING" and want != "PENDING":
+        updates.append(("confirm_status", want))
+    if (r.get("claimed_by") or None) != (local.get("claimed_by") or None):
+        await execute(
+            "UPDATE contracts SET claimed_by = ?, claimed_at = ?, nudged_at = NULL WHERE id = ?",
+            (r.get("claimed_by"), r.get("claimed_at"), local["id"]),
+        )
+    if updates:
         await execute(
             "UPDATE contracts SET confirm_status = ? WHERE id = ?",
             (want, local["id"]),
         )
+        await _post_contract_log(bot, guild_id, {**r, "_decision": want})
+
+
+async def _post_contract_log(bot, guild_id: str, r: dict):
+    """Лог новых контрактов и решений в настроенный канал + пинги."""
+    if bot is None:
+        return
+    try:
+        guild = bot.get_guild(int(guild_id))
+        if guild is None:
+            return
+        rows = await fetch_all(
+            "SELECT setting_key, setting_value FROM guild_settings WHERE guild_id = ? AND setting_key IN ('contracts_log_channel_id', 'contracts_ping_role_ids')",
+            (guild_id,),
+        )
+        cfg = {x["setting_key"]: x["setting_value"] for x in rows}
+        ch_id = (cfg.get("contracts_log_channel_id") or "").strip()
+        if not ch_id or not ch_id.isdigit():
+            return
+        channel = guild.get_channel(int(ch_id))
+        if channel is None:
+            try:
+                channel = await guild.fetch_channel(int(ch_id))
+            except Exception:
+                return
+        ping_ids = [x.strip() for x in (cfg.get("contracts_ping_role_ids") or "").split(",") if x.strip().isdigit()]
+        pings = " ".join(f"<@&{pid}" + ">" for pid in ping_ids)
+        decision = r.get("_decision")
+        if decision:
+            title = "✅ Контракт принят" if decision == "APPROVED" else "❌ Контракт отклонен"
+            color = 0x2ECC71 if decision == "APPROVED" else 0xE74C3C
+        else:
+            title = "📝 Новый контракт с сайта"
+            color = 0x3498DB
+        embed = discord.Embed(title=title, color=color)
+        embed.add_field(name="ID", value=str(r.get("id")), inline=True)
+        embed.add_field(name="Тип", value=str(r.get("contract_type")), inline=True)
+        if r.get("price"):
+            embed.add_field(name="Сумма", value=str(r.get("price")), inline=True)
+        embed.add_field(name="От", value=f"<@{r.get('discord_id')}>", inline=False)
+        embed.add_field(name="Сайт", value=f"https://botdiscord-87a.pages.dev/contracts/{r.get('id')}", inline=False)
+        content = pings if pings and not decision else None
+        await channel.send(content=content, embed=embed)
+    except Exception as e:
+        print(f"[contracts-log] warn: {e}")

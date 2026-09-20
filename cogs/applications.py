@@ -73,7 +73,6 @@ async def is_staff_member(member: discord.Member) -> bool:
 
 
 async def find_guild_for_channel(bot, channel_id: int):
-    """Найти сервер по ID канала (мульти-гильдия)."""
     for g in list(bot.guilds):
         try:
             if g.get_channel(int(channel_id)):
@@ -81,6 +80,15 @@ async def find_guild_for_channel(bot, channel_id: int):
         except Exception:
             pass
     return None
+
+
+async def recruiter_pings(guild_id: str) -> str | None:
+    try:
+        raw = await get_setting("panel_recruiter_role_ids", str(guild_id)) or ""
+        ids = [x.strip() for x in raw.split(",") if x.strip().isdigit()]
+        return " ".join(f"<@&{i}>" for i in ids) or None
+    except Exception:
+        return None
 
 
 async def get_log_channel(guild: discord.Guild):
@@ -204,6 +212,19 @@ async def fetch_member_safe(guild: discord.Guild, user_id: int) -> discord.Membe
     return member
 
 
+def _parse_ts(s):
+    if not s:
+        return None
+    t = str(s).strip().replace('Z', '+00:00')
+    try:
+        dt = datetime.fromisoformat(t)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 class RejectReasonModal(discord.ui.Modal, title="Причина отказа"):
     reason = discord.ui.TextInput(label="Причина", style=discord.TextStyle.paragraph, max_length=500)
 
@@ -280,7 +301,8 @@ class ApplicationModal(discord.ui.Modal):
             embed.add_field(name=str(q.get("label"))[:256], value=v[:1024], inline=False)
         embed.add_field(name="Discord", value=f"<@{interaction.user.id}>", inline=False)
         embed.set_footer(text=f"{APP_TAG} app_id={app_id}")
-        panel_msg = await ch.send(embed=embed, view=ApplicationView(self.cog, app_id))
+        pings = await recruiter_pings(str(guild.id))
+        panel_msg = await ch.send(content=pings, embed=embed, view=ApplicationView(self.cog, app_id))
         await execute(
             "UPDATE applications SET log_channel_id=?, log_message_id=? WHERE id=?",
             (str(ch.id), str(panel_msg.id), app_id),
@@ -394,6 +416,9 @@ class ApplicationsCog(commands.Cog):
 
         if not self.site_poll_loop.is_running():
             self.site_poll_loop.start()
+
+        if not self.nudge_loop.is_running():
+            self.nudge_loop.start()
 
         if not self._did_rescan:
             self._did_rescan = True
@@ -574,7 +599,13 @@ class ApplicationsCog(commands.Cog):
         if remove_buttons:
             await msg.edit(embed=embed, view=None)
         else:
-            await msg.edit(embed=embed, view=ApplicationView(self, app_id))
+            view = ApplicationView(self, app_id)
+            if not claimed_by:
+                # Кнопки решения только после взятия
+                for child in [ch for ch in list(view.children)
+                              if getattr(ch, "custom_id", "") in ("app:accept", "app:reject")]:
+                    view.remove_item(child)
+            await msg.edit(embed=embed, view=view)
 
     async def claim(self, app_id: str, interaction: discord.Interaction):
         row = await fetch_one("SELECT * FROM applications WHERE id=?", (app_id,))
@@ -583,14 +614,8 @@ class ApplicationsCog(commands.Cog):
         if row["status"] in ("ACCEPTED", "REJECTED"):
             return False, "❌ Заявка уже закрыта."
 
-        if (
-            row["status"] == "CLAIMED"
-            and row.get("claimed_by")
-            and int(row["claimed_by"]) != interaction.user.id
-            and not is_admin(interaction.user)
-        ):
-            cb = row.get("claimed_by")
-            return False, f"❌ Эту заявку уже рассматривает <@{cb}>."
+        # Перехват разрешен: взять чужую может любой стафф
+        took_over = bool(row.get("claimed_by")) and str(row.get("claimed_by")) != str(interaction.user.id)
 
         guild = interaction.guild
         recruiter: discord.Member = interaction.user  # type: ignore
@@ -619,7 +644,7 @@ class ApplicationsCog(commands.Cog):
             return False, "❌ Кандидат покинул сервер. Заявка автоматически отклонена."
 
         await execute(
-            "UPDATE applications SET status='CLAIMED', claimed_by=?, claimed_at=? WHERE id=?",
+            "UPDATE applications SET status='CLAIMED', claimed_by=?, claimed_at=?, nudged_at=NULL WHERE id=?",
             (str(recruiter.id), now_iso(), app_id),
         )
         try:
@@ -629,7 +654,7 @@ class ApplicationsCog(commands.Cog):
         except Exception as e:
             print(f"[api_sync] warn: {e}")
 
-        temp_role = guild.get_role(TEMP_CALL_ROLE_ID)
+        temp_role = await get_temp_role(guild)
         if temp_role and temp_role not in member.roles:
             await member.add_roles(temp_role, reason="Заявка взята на рассмотрение (обзвон)")
             await execute("UPDATE applications SET temp_role_given=1 WHERE id=?", (app_id,))
@@ -722,7 +747,7 @@ class ApplicationsCog(commands.Cog):
         except Exception as e:
             print(f"[api_sync] warn: {e}")
 
-        temp_role = guild.get_role(TEMP_CALL_ROLE_ID)
+        temp_role = await get_temp_role(guild)
         if temp_role and temp_role in member.roles:
             await member.remove_roles(temp_role, reason="Заявка закрыта")
             await execute("UPDATE applications SET temp_role_given=0 WHERE id=?", (app_id,))
@@ -777,6 +802,42 @@ class ApplicationsCog(commands.Cog):
 
     @site_poll_loop.before_loop
     async def _before_poll(self):
+        await self.bot.wait_until_ready()
+
+    @tasks.loop(minutes=10)
+    async def nudge_loop(self):
+        try:
+            rows = await fetch_all(
+                "SELECT * FROM applications WHERE status IN ('PENDING','CLAIMED') "
+                "AND claimed_by IS NOT NULL AND claimed_by != '' AND nudged_at IS NULL"
+            )
+        except Exception as e:
+            print(f"[ApplicationsCog] nudge warn fetch: {e}")
+            return
+        now = datetime.now(timezone.utc)
+        for row in rows:
+            try:
+                ts = _parse_ts(row.get("claimed_at"))
+                if not ts or (now - ts).total_seconds() < 600:
+                    continue
+                guild = await find_guild_for_channel(self.bot, int(row["log_channel_id"])) if row.get("log_channel_id") else None
+                if guild is None:
+                    continue
+                thread = guild.get_thread(int(row["thread_id"])) if row.get("thread_id") else None
+                if thread is None:
+                    continue
+                link = ""
+                if row.get("site_id"):
+                    link = f"\nhttps://botdiscord-87a.pages.dev/applications/{row['site_id']}"
+                await thread.send(
+                    f"⏰ <@{row['claimed_by']}> ты взял заявку 10 минут назад, но решения нет.{link}")
+                await execute("UPDATE applications SET nudged_at=? WHERE id=?",
+                              (now_iso(), row["id"]))
+            except Exception as e:
+                print(f"[ApplicationsCog] nudge warn: {e}")
+
+    @nudge_loop.before_loop
+    async def _before_nudge(self):
         await self.bot.wait_until_ready()
 
     async def _poll_guild(self, guild: discord.Guild):
@@ -869,7 +930,8 @@ class ApplicationsCog(commands.Cog):
                             value=str(val)[:1024] or "—", inline=False)
         embed.add_field(name="Discord", value=f"<@{local['discord_user_id']}>", inline=False)
         embed.set_footer(text=f"{APP_TAG} app_id={app_id}")
-        panel_msg = await ch.send(embed=embed, view=ApplicationView(self, app_id))
+        pings = await recruiter_pings(str(guild.id))
+        panel_msg = await ch.send(content=pings, embed=embed, view=ApplicationView(self, app_id))
         thread = await panel_msg.create_thread(
             name=f"Заявка {app_id[:8]}", auto_archive_duration=1440,
             reason=f"Чат по заявке {app_id} (с сайта)",

@@ -87,6 +87,18 @@ async def migrate_db():
         except Exception:
             pass  # колонка уже есть
 
+        # взятие и напоминания
+        for ddl in (
+            "ALTER TABLE contracts ADD COLUMN claimed_by TEXT",
+            "ALTER TABLE contracts ADD COLUMN claimed_at TEXT",
+            "ALTER TABLE contracts ADD COLUMN nudged_at TEXT",
+            "ALTER TABLE applications ADD COLUMN nudged_at TEXT",
+        ):
+            try:
+                await db.execute(ddl)
+            except Exception:
+                pass  # колонка уже есть
+
         await db.commit()
     finally:
         await db.close()

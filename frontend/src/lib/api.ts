@@ -87,6 +87,7 @@ export const guildsApi = {
       params: { is_enabled: isEnabled },
     }),
   discordRoles: (guildId: string) => api.get(`/guilds/${guildId}/discord-roles`),
+  discordChannels: (guildId: string) => api.get(`/guilds/${guildId}/discord-channels`),
   botLogs: (guildId: string, limit = 100) =>
     api.get(`/guilds/${guildId}/bot-logs`, { params: { limit } }),
 };
@@ -99,6 +100,8 @@ export const contractsApi = {
     api.get(`/guilds/${guildId}/contracts/`, { params }),
   get: (guildId: string, contractId: number) =>
     api.get(`/guilds/${guildId}/contracts/${contractId}`),
+  claim: (guildId: string, contractId: number) =>
+    api.post(`/guilds/${guildId}/contracts/${contractId}/claim`),
   update: (guildId: string, contractId: number, data: any) =>
     api.put(`/guilds/${guildId}/contracts/${contractId}`, data),
   delete: (guildId: string, contractId: number) =>

@@ -137,7 +137,12 @@ export default function ApplicationDetailPage() {
                 <Hand size={18} /> Взять
               </button>
             )}
-            {isAdmin && (
+            {isStaff && app.claimed_by && app.claimed_by !== user?.discord_id && (
+              <button onClick={() => claim.mutate()} disabled={claim.isPending} className="btn btn-secondary flex items-center gap-2 text-sm">
+                <Hand size={16} /> Перехватить
+              </button>
+            )}
+            {isAdmin && app.claimed_by && (
               <>
                 <input
                   value={reason}
