@@ -290,6 +290,57 @@ auth.post('/refresh', async (c) => {
   })
 })
 
+// POST /auth/switch - сменить активный сервер (discord-сессии)
+auth.post('/switch', async (c) => {
+  const authHeader = c.req.header('Authorization')
+
+  if (!authHeader?.startsWith('Bearer ')) {
+    return c.json({ error: 'Missing authorization' }, 401)
+  }
+
+  const payload = await verifyToken(authHeader.substring(7), c.env.SECRET_KEY)
+
+  if (!payload || payload.user_type !== 'discord') {
+    return c.json({ error: 'Invalid token' }, 401)
+  }
+
+  const { guild_id } = await c.req.json<{ guild_id: string }>()
+
+  if (!guild_id) {
+    return c.json({ error: 'Missing guild_id' }, 400)
+  }
+
+  const discordId = payload.discord_id as string
+
+  // Проверка членства: строка в users или permissions (данные от бота)
+  const member = await c.env.DB.prepare(
+    'SELECT 1 FROM users WHERE discord_id = ? AND guild_id = ? UNION SELECT 1 FROM permissions WHERE discord_id = ? AND guild_id = ? LIMIT 1'
+  ).bind(discordId, guild_id, discordId, guild_id).first()
+
+  if (!member) {
+    return c.json({ error: 'You are not a member of this guild' }, 403)
+  }
+
+  const permission = await c.env.DB.prepare(
+    'SELECT role FROM permissions WHERE discord_id = ? AND guild_id = ?'
+  ).bind(discordId, guild_id).first<{ role: string }>()
+
+  const role = permission?.role || 'user'
+
+  const accessToken = await createToken(
+    { user_type: 'discord', discord_id: discordId, guild_id, role },
+    c.env.SECRET_KEY,
+    '1h'
+  )
+  const refreshToken = await createToken(
+    { user_type: 'discord', discord_id: discordId, guild_id, role },
+    c.env.SECRET_KEY,
+    '7d'
+  )
+
+  return c.json({ access_token: accessToken, refresh_token: refreshToken })
+})
+
 // GET /auth/me
 auth.get('/me', async (c) => {
   const authHeader = c.req.header('Authorization')

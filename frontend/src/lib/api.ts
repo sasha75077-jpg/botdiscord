@@ -68,6 +68,9 @@ export const authApi = {
   refreshToken: (refreshToken: string) =>
     api.post('/auth/refresh', { refresh_token: refreshToken }),
 
+  switchGuild: (guildId: string) =>
+    api.post('/auth/switch', { guild_id: guildId }),
+
   getCurrentUser: () => api.get('/auth/me'),
 };
 

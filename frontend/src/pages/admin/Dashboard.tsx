@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { guildsApi, permissionsApi } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
+import { useParams } from 'react-router-dom';
 import {
   Server,
   Users,
@@ -17,7 +18,8 @@ import { Link } from 'react-router-dom';
 
 export default function AdminDashboard() {
   const { user } = useAuthStore();
-  const guildId = user?.guild_id;
+  const { guildId: paramGuildId } = useParams<{ guildId: string }>();
+  const guildId = paramGuildId ?? user?.guild_id;
 
   // Получить информацию о сервере
   const { data: guild, isLoading: guildLoading } = useQuery({
