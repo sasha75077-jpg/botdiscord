@@ -1,7 +1,31 @@
 import { Hono } from 'hono'
 import type { Env } from '../index'
+import { verifyToken } from './auth'
 
 const users = new Hono<{ Bindings: Env }>()
+
+// PUT /guilds/:guildId/users/me - свой static для выгрузки премий
+users.put('/:guildId/users/me', async (c) => {
+  const header = c.req.header('Authorization')
+  if (!header?.startsWith('Bearer ')) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+  const payload: any = await verifyToken(header.substring(7), c.env.SECRET_KEY)
+  if (!payload?.discord_id) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+  const guildId = c.req.param('guildId')
+  if (payload.user_type !== 'owner' && payload.guild_id !== guildId) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+  const body = await c.req.json<{ static?: string }>()
+  const st = String(body.static || '').trim().slice(0, 32)
+  await c.env.DB.prepare(
+    `INSERT INTO users (discord_id, guild_id, static) VALUES (?, ?, ?)
+     ON CONFLICT(discord_id, guild_id) DO UPDATE SET static = ?`
+  ).bind(payload.discord_id, guildId, st || null, st || null).run()
+  return c.json({ static: st || null })
+})
 
 // GET /guilds/:guildId/users/me
 users.get('/:guildId/users/me', async (c) => {

@@ -113,6 +113,7 @@ contracts.post('/:guildId/contracts/sync', async (c) => {
   const body = await c.req.json<{
     ts: string; discord_id: string; contract_type: string;
     price?: number; nickname?: string; discord_username?: string; status?: string;
+    static?: string;
   }>()
 
   if (!body.ts || !body.discord_id || !body.contract_type) {
@@ -124,8 +125,12 @@ contracts.post('/:guildId/contracts/sync', async (c) => {
   const nick = body.nickname || body.discord_id
 
   await c.env.DB.prepare(
-    'INSERT INTO users (discord_id, guild_id, discord_username) VALUES (?, ?, ?) ON CONFLICT(discord_id, guild_id) DO NOTHING'
-  ).bind(body.discord_id, guildId, body.discord_username || null).run()
+    `INSERT INTO users (discord_id, guild_id, discord_username, static) VALUES (?, ?, ?, ?)
+     ON CONFLICT(discord_id, guild_id) DO UPDATE SET
+       discord_username = COALESCE(?, discord_username),
+       static = COALESCE(?, static)`
+  ).bind(body.discord_id, guildId, body.discord_username || null, body.static || null,
+    body.discord_username || null, body.static || null).run()
 
   const existing = await c.env.DB.prepare(
     'SELECT id FROM contracts WHERE guild_id = ? AND created_at = ? AND discord_id = ? AND contract_type = ?'

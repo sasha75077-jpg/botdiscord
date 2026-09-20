@@ -4236,6 +4236,12 @@ async def approve_bonus(interaction: discord.Interaction, report_id: int):
         await interaction.response.send_message("❌ Отчёт не найден.", ephemeral=True)
         return
 
+    from cogs.bonus import week_locked
+    if week_locked(r.get("week_end") or ""):
+        await interaction.response.send_message(
+            "❌ Неделя закрыта: после понедельника принимать нельзя.", ephemeral=True)
+        return
+
     sums = await calc_live_sums(str(r["discord_id"]), str(r["week_start"]), str(r["week_end"]))
     contracts_sum = float(sums["contracts_sum"])
     rank_bonus_sum = float(sums["rank_bonus_sum"])
@@ -4331,6 +4337,12 @@ class RejectBonusModal(discord.ui.Modal, title="Отклонение преми�
                 return
         elif st not in ("NEW", "TAKEN"):
             await interaction.response.send_message("Нельзя отклонить в этом статусе.", ephemeral=True)
+            return
+
+        from cogs.bonus import week_locked
+        if week_locked(r.get("week_end") or ""):
+            await interaction.response.send_message(
+                "❌ Неделя закрыта: после понедельника решать нельзя.", ephemeral=True)
             return
 
         admin_id = str(interaction.user.id)

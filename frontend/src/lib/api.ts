@@ -118,6 +118,8 @@ export const usersApi = {
   getStats: (guildId: string, discordId: string) =>
     api.get(`/guilds/${guildId}/users/${discordId}/stats`),
   list: (guildId: string) => api.get(`/guilds/${guildId}/users/`),
+  setMyStatic: (guildId: string, value: string) =>
+    api.put(`/guilds/${guildId}/users/me`, { static: value }),
 };
 
 // Applications API
@@ -176,6 +178,10 @@ export const bonusApi = {
     api.get(`/guilds/${guildId}/bonus`, { params }),
   submit: (guildId: string, week_start?: string, week_end?: string) =>
     api.post(`/guilds/${guildId}/bonus`, { week_start, week_end }),
+  approve: (guildId: string, id: number) =>
+    api.put(`/guilds/${guildId}/bonus/${id}/approve`),
+  reject: (guildId: string, id: number, reason?: string) =>
+    api.put(`/guilds/${guildId}/bonus/${id}/reject`, { reason }),
 };
 
 // Prices API

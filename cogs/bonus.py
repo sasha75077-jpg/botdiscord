@@ -1,10 +1,22 @@
 import json
+from datetime import datetime, timedelta, timezone
 from database import fetch_one, fetch_all, execute, UniqueViolation
 from utils.week import week_range_msk
 import os
 print("RUNNING bonus.py FROM:", os.path.abspath(__file__))
 
 from services.prices import get_price
+
+MSK = timezone(timedelta(hours=3))
+
+
+def week_locked(week_end: str) -> bool:
+    """Неделя закрыта после понедельника 00:00 МСК."""
+    try:
+        we = datetime.strptime(str(week_end)[:10], "%Y-%m-%d").date()
+        return datetime.now(MSK).date() > we
+    except Exception:
+        return False
 
 
 async def calc_bonus_for_user_week(discord_id: str, guild_id: str):

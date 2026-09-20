@@ -30,6 +30,29 @@ function isStaff(role: string): boolean {
   return role === 'owner' || role === 'bot' || role === 'admin' || role === 'recruiter'
 }
 
+function isAdmin(role: string): boolean {
+  return role === 'owner' || role === 'bot' || role === 'admin'
+}
+
+// Неделя закрыта после понедельника 00:00 МСК (today > week_end)
+function weekLocked(weekEnd: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(weekEnd || '')
+  if (!m) return false
+  const end = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  const nowMsk = Date.now() + 3 * 3600000
+  const todayStart = new Date(nowMsk)
+  todayStart.setUTCHours(0, 0, 0, 0)
+  return todayStart.getTime() > end
+}
+
+function currentWeek(): { week_start: string; week_end: string } {
+  const now = new Date()
+  const day = (now.getUTCDay() + 6) % 7
+  const mon = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - day))
+  const sun = new Date(mon.getTime() + 6 * 86400000)
+  return { week_start: mon.toISOString().slice(0, 10), week_end: sun.toISOString().slice(0, 10) }
+}
+
 // GET /guilds/:guildId/bonus?status=&discord_id=&since= - свои или все (staff)
 bonus.get('/:guildId/bonus', async (c) => {
   const guildId = c.req.param('guildId')
@@ -76,14 +99,14 @@ bonus.post('/:guildId/bonus', async (c) => {
 
   const body = await c.req.json<{ week_start?: string; week_end?: string }>()
   let { week_start, week_end } = body
+  const cur = currentWeek()
   if (!week_start || !week_end) {
-    // Текущая неделя Пн-Вс
-    const now = new Date()
-    const day = (now.getUTCDay() + 6) % 7
-    const mon = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - day))
-    const sun = new Date(mon.getTime() + 6 * 86400000)
-    week_start = mon.toISOString().slice(0, 10)
-    week_end = sun.toISOString().slice(0, 10)
+    week_start = cur.week_start
+    week_end = cur.week_end
+  }
+  // Премия собирается только за текущую неделю
+  if (week_start !== cur.week_start || week_end !== cur.week_end) {
+    return c.json({ error: 'Премия подается только за текущую неделю' }, 400)
   }
 
   const dup = await c.env.DB.prepare(
@@ -108,6 +131,121 @@ bonus.post('/:guildId/bonus', async (c) => {
   const row = await c.env.DB.prepare('SELECT * FROM bonus_reports WHERE id = ?')
     .bind(res.meta.last_row_id).first()
   return c.json(row)
+})
+
+// PUT /guilds/:guildId/bonus/:id/approve - принять (admin/owner, только открытая неделя)
+bonus.put('/:guildId/bonus/:id/approve', async (c) => {
+  const guildId = c.req.param('guildId')
+  const id = c.req.param('id')
+  const who = await caller(c, c.env)
+  if (!who || !sameGuild(who, guildId)) return c.json({ error: 'Forbidden' }, 403)
+  if (who.role !== 'owner' && who.role !== 'bot' && who.role !== 'admin') {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+
+  const row: any = await c.env.DB.prepare(
+    'SELECT * FROM bonus_reports WHERE id = ? AND guild_id = ?'
+  ).bind(id, guildId).first()
+  if (!row) return c.json({ error: 'Not found' }, 404)
+  if (row.status !== 'pending') return c.json({ error: 'Уже обработана' }, 409)
+  if (weekLocked(row.week_end)) {
+    return c.json({ error: 'Неделя закрыта: после понедельника принимать нельзя' }, 403)
+  }
+
+  // Сумма = сумма прайсов входящих контрактов (точный расчет с рангами - в Discord)
+  let amount = 0
+  try {
+    const items = JSON.parse(row.contracts_json || '[]')
+    for (const it of items) amount += Number(it.amount ?? it.price ?? 0)
+  } catch { /* ignore */ }
+
+  await c.env.DB.prepare(
+    'UPDATE bonus_reports SET status = ?, amount = ? WHERE id = ?'
+  ).bind('approved', amount, id).run()
+  const updated = await c.env.DB.prepare('SELECT * FROM bonus_reports WHERE id = ?').bind(id).first()
+  return c.json(updated)
+})
+
+// PUT /guilds/:guildId/bonus/:id/reject - отклонить (admin/owner, только открытая неделя)
+bonus.put('/:guildId/bonus/:id/reject', async (c) => {
+  const guildId = c.req.param('guildId')
+  const id = c.req.param('id')
+  const who = await caller(c, c.env)
+  if (!who || !sameGuild(who, guildId)) return c.json({ error: 'Forbidden' }, 403)
+  if (who.role !== 'owner' && who.role !== 'bot' && who.role !== 'admin') {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+
+  const body = await c.req.json<{ reason?: string }>().catch(() => ({}) as any)
+  const row: any = await c.env.DB.prepare(
+    'SELECT * FROM bonus_reports WHERE id = ? AND guild_id = ?'
+  ).bind(id, guildId).first()
+  if (!row) return c.json({ error: 'Not found' }, 404)
+  if (row.status !== 'pending') return c.json({ error: 'Уже обработана' }, 409)
+  if (weekLocked(row.week_end)) {
+    return c.json({ error: 'Неделя закрыта: после понедельника решать нельзя' }, 403)
+  }
+
+  await c.env.DB.prepare(
+    'UPDATE bonus_reports SET status = ?, reason = ? WHERE id = ?'
+  ).bind('rejected', body.reason || row.reason, id).run()
+  const updated = await c.env.DB.prepare('SELECT * FROM bonus_reports WHERE id = ?').bind(id).first()
+  return c.json(updated)
+})
+
+// GET /guilds/:guildId/bonus/export?week_start=&week_end=&comment= - txt выгрузка принятых (admin/owner)
+bonus.get('/:guildId/bonus/export', async (c) => {
+  const guildId = c.req.param('guildId')
+  const who = await caller(c, c.env)
+  if (!who || !sameGuild(who, guildId)) return c.json({ error: 'Forbidden' }, 403)
+  if (who.role !== 'owner' && who.role !== 'bot' && who.role !== 'admin') {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+
+  let weekStart = c.req.query('week_start') || ''
+  let weekEnd = c.req.query('week_end') || ''
+  if (!weekStart || !weekEnd) {
+    // По умолчанию - последняя завершенная неделя
+    const now = new Date()
+    const day = (now.getUTCDay() + 6) % 7
+    const mon = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - day))
+    const prevSun = new Date(mon.getTime() - 86400000)
+    const prevMon = new Date(prevSun.getTime() - 6 * 86400000)
+    weekStart = prevMon.toISOString().slice(0, 10)
+    weekEnd = prevSun.toISOString().slice(0, 10)
+  }
+
+  const guild = await c.env.DB.prepare(
+    'SELECT guild_name FROM guilds WHERE guild_id = ?'
+  ).bind(guildId).first<{ guild_name: string }>()
+
+  const rows = await c.env.DB.prepare(
+    `SELECT b.*, u.static as user_static FROM bonus_reports b
+     LEFT JOIN users u ON u.discord_id = b.recipient_discord_id AND u.guild_id = b.guild_id
+     WHERE b.guild_id = ? AND b.status = 'approved'
+     AND b.week_start = ? AND b.week_end = ?
+     ORDER BY u.static ASC`
+  ).bind(guildId, weekStart, weekEnd).all()
+
+  const commentParam = c.req.query('comment') || ''
+  const lines: string[] = [
+    `Премия семьи ${guild?.guild_name || guildId} за неделю с ${weekStart} по ${weekEnd}`,
+    '',
+  ]
+  for (const r of rows.results as any[]) {
+    const comment = commentParam || `премия за неделю с ${weekStart} по ${weekEnd}`
+    lines.push(String(r.user_static || r.recipient_discord_id))
+    lines.push(String(r.amount ?? 0))
+    lines.push(comment)
+    lines.push('')
+  }
+
+  return new Response('\uFEFF' + lines.join('\n'), {
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Content-Disposition': `attachment; filename="bonus_${weekStart}_${weekEnd}.txt"`,
+    },
+  })
 })
 
 export const bonusRoutes = bonus

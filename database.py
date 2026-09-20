@@ -275,6 +275,10 @@ async def insert_contract_if_new(row: dict):
             "SELECT confirm_status, price FROM contracts WHERE guild_id=? AND ts=? AND discord_id=? AND contract_type=?",
             (guild_id, row.get("ts"), row.get("discord_id"), row.get("contract_type"))
         )
+        usr = await fetch_one(
+            "SELECT static FROM users WHERE discord_id=? AND guild_id=?",
+            (row.get("discord_id"), guild_id),
+        )
         queue_contract_sync(
             guild_id,
             row.get("ts"),
@@ -282,6 +286,7 @@ async def insert_contract_if_new(row: dict):
             row.get("contract_type"),
             price=((cur or {}).get("price") or row.get("price", 0)),
             status=((cur or {}).get("confirm_status") or "PENDING"),
+            static=((usr or {}).get("static")),
         )
     except Exception as e:
         print(f"[api_sync] warn: {e}")
