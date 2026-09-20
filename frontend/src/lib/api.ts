@@ -76,7 +76,7 @@ export const authApi = {
 
 // Guilds API
 export const guildsApi = {
-  list: () => api.get('/guilds/'),
+  list: () => api.get('/guilds'),
   get: (guildId: string) => api.get(`/guilds/${guildId}`),
   getSettings: (guildId: string) => api.get(`/guilds/${guildId}/settings`),
   updateSettings: (guildId: string, settings: Record<string, string>) =>
