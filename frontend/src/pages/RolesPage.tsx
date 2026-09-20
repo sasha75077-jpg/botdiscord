@@ -109,8 +109,8 @@ export default function RolesPage() {
       const payload: Record<string, string> = {};
       if (isOwner) {
         payload.panel_admin_role_ids = adminIds.join(',');
-        payload.family_member_role_ids = familyIds.join(',');
       }
+      payload.family_member_role_ids = familyIds.join(',');
       payload.panel_recruiter_role_ids = recruitIds.join(',');
       await guildsApi.updateSettings(guildId!, payload);
     },
@@ -197,7 +197,7 @@ export default function RolesPage() {
           />
         </div>
       </div>
-      {isOwner && (
+      {isOwner || user?.role === 'admin' ? (
         <div className="card">
           <h2 className="text-xl font-bold mb-1">Член семьи (FAMQ)</h2>
           <p className="text-sm text-gray-500 mb-3">
@@ -209,7 +209,7 @@ export default function RolesPage() {
             onToggle={(id) => toggle(familyIds, setFamilyIds, id)}
           />
         </div>
-      )}
+      ) : null}
       <button onClick={() => saveBindings.mutate()} disabled={saveBindings.isPending} className="btn btn-primary">
         {saveBindings.isPending ? 'Сохранение...' : 'Сохранить привязки'}
       </button>
