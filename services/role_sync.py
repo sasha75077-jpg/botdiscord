@@ -279,6 +279,60 @@ async def reconcile_guild(bot, guild):
 SITE_TO_LOCAL_STATUS = {"pending": "PENDING", "approved": "APPROVED", "rejected": "REJECTED"}
 
 
+async def poll_site_bonus():
+    """Забрать премии с сайта в локальную БД (черновики)."""
+    if not SYNC_SECRET:
+        return
+    try:
+        guilds = await fetch_all("SELECT guild_id FROM guilds WHERE is_active = 1")
+    except Exception as e:
+        print(f"[bonus-poll] warn guilds: {e}")
+        return
+    for g in guilds:
+        gid = str(g["guild_id"])
+        try:
+            await _poll_guild_bonus(gid)
+        except Exception as e:
+            print(f"[bonus-poll] warn {gid}: {e}")
+
+
+async def _poll_guild_bonus(guild_id: str):
+    cursor = await get_setting("bonus_poll_cursor", guild_id) or "1970-01-01 00:00:00"
+    try:
+        data = await asyncio.to_thread(
+            _api_get, f"/guilds/{guild_id}/bonus?status=pending&since={urllib.parse.quote(cursor)}")
+    except Exception as e:
+        print(f"[bonus-poll] warn api: {e}")
+        return
+    rows = data if isinstance(data, list) else []
+    newest = cursor
+    for r in rows:
+        try:
+            ts = str(r.get("updated_at") or r.get("created_at") or "")
+            if ts > newest:
+                newest = ts
+            if not r.get("id"):
+                continue
+            exists = await fetch_one("SELECT report_id FROM bonus_reports WHERE site_id = ?", (r["id"],))
+            if exists:
+                continue
+            week = str(r.get("reason") or "")
+            ws, we = (week.split("..") + ["", ""])[:2]
+            await execute(
+                """INSERT INTO bonus_reports
+                   (guild_id, discord_id, week_start, week_end, total_amount,
+                    contracts_json, submitted_at, status, site_id)
+                   VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'NEW', ?)""",
+                (guild_id, str(r.get("recipient_discord_id") or r.get("discord_id")),
+                 ws, we, float(r.get("amount") or 0),
+                 r.get("contracts_json") or "[]", r["id"]),
+            )
+        except Exception as e:
+            print(f"[bonus-poll] warn row: {e}")
+    if newest != cursor:
+        await set_setting("bonus_poll_cursor", newest, guild_id)
+
+
 async def nudge_site_contracts(bot):
     """Напомнить взявшим контракты без решения (10+ минут)."""
     if bot is None:

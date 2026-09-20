@@ -93,6 +93,7 @@ async def migrate_db():
             "ALTER TABLE contracts ADD COLUMN claimed_at TEXT",
             "ALTER TABLE contracts ADD COLUMN nudged_at TEXT",
             "ALTER TABLE applications ADD COLUMN nudged_at TEXT",
+            "ALTER TABLE bonus_reports ADD COLUMN site_id INTEGER",
         ):
             try:
                 await db.execute(ddl)

@@ -4261,7 +4261,8 @@ async def approve_bonus(interaction: discord.Interaction, report_id: int):
     try:
         from services.api_sync import queue_bonus_sync
         queue_bonus_sync(str(interaction.guild.id), int(report_id), str(r["discord_id"]),
-                         amount=float(total), status="APPROVED")
+                         amount=float(total), status="APPROVED",
+                         external_id=(f"site:{r['site_id']}" if r.get("site_id") else None))
     except Exception as e:
         print(f"[api_sync] warn: {e}")
 
@@ -4307,7 +4308,7 @@ class RejectBonusModal(discord.ui.Modal, title="Отклонение преми�
     async def on_submit(self, interaction: discord.Interaction):
         r = await fetch_one(
             """
-            SELECT report_id, discord_id, week_start, week_end, status, sea_amount
+            SELECT report_id, discord_id, week_start, week_end, status, sea_amount, site_id
             FROM bonus_reports
             WHERE report_id=?
             """,
@@ -4365,7 +4366,8 @@ class RejectBonusModal(discord.ui.Modal, title="Отклонение преми�
         try:
             from services.api_sync import queue_bonus_sync
             queue_bonus_sync(str(interaction.guild.id), int(self.report_id), str(r["discord_id"]),
-                             amount=float(total), status="REJECTED", reason=reason_text)
+                             amount=float(total), status="REJECTED", reason=reason_text,
+                             external_id=(f"site:{r['site_id']}" if r.get("site_id") else None))
         except Exception as e:
             print(f"[api_sync] warn: {e}")
 

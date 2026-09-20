@@ -196,4 +196,76 @@ guilds.get('/:guildId/discord-channels', async (c) => {
   })
 })
 
+// GET /guilds/:guildId/dashboard - сводка для дешборда юзера
+guilds.get('/:guildId/dashboard', async (c) => {
+  const header = c.req.header('Authorization')
+  if (!header?.startsWith('Bearer ')) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+  const payload: any = await verifyToken(header.substring(7), c.env.SECRET_KEY)
+  if (!payload || !payload.discord_id) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+
+  const guildId = c.req.param('guildId')
+  if (payload.user_type !== 'owner' && payload.guild_id !== guildId) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+  const discordId = payload.discord_id as string
+
+  // Онлайн/всего участников + имя сервера
+  let membersTotal: number | null = null
+  let membersOnline: number | null = null
+  let guildName: string | null = null
+  if (c.env.DISCORD_BOT_TOKEN) {
+    try {
+      const resp = await fetch(
+        `${c.env.DISCORD_API_ENDPOINT}/guilds/${guildId}?with_counts=true`,
+        { headers: { Authorization: `Bot ${c.env.DISCORD_BOT_TOKEN}` } }
+      )
+      if (resp.ok) {
+        const g = await resp.json<{
+          approximate_member_count?: number; approximate_presence_count?: number; name?: string
+        }>()
+        membersTotal = g.approximate_member_count ?? null
+        membersOnline = g.approximate_presence_count ?? null
+        guildName = g.name ?? null
+      }
+    } catch { /* ignore */ }
+  }
+
+  const roles = await c.env.DB.prepare(
+    `SELECT role, COUNT(*) as c FROM permissions WHERE guild_id = ? AND role IN ('admin','recruiter') GROUP BY role`
+  ).bind(guildId).all()
+  let admins = 0
+  let recruiters = 0
+  for (const r of roles.results as Array<{ role: string; c: number }>) {
+    if (r.role === 'admin') admins = r.c
+    if (r.role === 'recruiter') recruiters = r.c
+  }
+
+  const mine = await c.env.DB.prepare(
+    `SELECT status, COUNT(*) as c FROM contracts WHERE guild_id = ? AND discord_id = ? GROUP BY status`
+  ).bind(guildId, discordId).all()
+  const myContracts = { total: 0, approved: 0, pending: 0, rejected: 0 } as Record<string, number>
+  for (const r of mine.results as Array<{ status: string; c: number }>) {
+    myContracts.total += r.c
+    if (r.status in myContracts) myContracts[r.status] = r.c
+  }
+
+  const recent = await c.env.DB.prepare(
+    'SELECT id, contract_type, price, status, created_at FROM contracts WHERE guild_id = ? AND discord_id = ? ORDER BY created_at DESC LIMIT 5'
+  ).bind(guildId, discordId).all()
+
+  return c.json({
+    guild_name: guildName,
+    members_total: membersTotal,
+    members_online: membersOnline,
+    admins,
+    recruiters,
+    my_contracts: myContracts,
+    my_recent: recent.results,
+  })
+})
+
 export const guildsRoutes = guilds

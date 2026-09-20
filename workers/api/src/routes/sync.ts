@@ -72,9 +72,17 @@ sync.post('/:guildId/bonus-reports/sync', async (c) => {
   }
   const status = mapStatus(body.status, { NEW: 'pending', TAKEN: 'pending' })
 
-  const existing = await c.env.DB.prepare(
-    'SELECT id FROM bonus_reports WHERE external_id = ?'
-  ).bind(body.external_id).first<{ id: number }>()
+  // external_id вида "site:<id>" - строка создана сайтом, ищем по id
+  let existing = null as { id: number } | null
+  if (body.external_id.startsWith('site:')) {
+    existing = await c.env.DB.prepare(
+      'SELECT id FROM bonus_reports WHERE id = ?'
+    ).bind(Number(body.external_id.slice(5)) || -1).first<{ id: number }>()
+  } else {
+    existing = await c.env.DB.prepare(
+      'SELECT id FROM bonus_reports WHERE external_id = ?'
+    ).bind(body.external_id).first<{ id: number }>()
+  }
 
   if (existing) {
     await c.env.DB.prepare(

@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { contractsApi } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
-import { ArrowLeft, CheckCircle, XCircle, Hand } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Hand, Trash2 } from 'lucide-react';
 
 export default function ContractDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const contractId = Number(id);
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
@@ -39,6 +40,11 @@ export default function ContractDetailPage() {
     onSuccess: invalidate,
     onError: (e: any) => setMsg(e.response?.data?.error || 'Ошибка'),
   });
+  const remove = useMutation({
+    mutationFn: () => contractsApi.delete(guildId, contractId),
+    onSuccess: () => navigate('/contracts'),
+    onError: (e: any) => setMsg(e.response?.data?.error || 'Ошибка удаления'),
+  });
 
   if (isLoading) return <p className="text-gray-500">Загрузка...</p>;
   if (!ct) return <p className="text-gray-500">Контракт не найден.</p>;
@@ -53,6 +59,17 @@ export default function ContractDetailPage() {
       <Link to="/contracts" className="btn btn-secondary inline-flex items-center gap-2">
         <ArrowLeft size={18} /> Все контракты
       </Link>
+      {isAdmin && (
+        <button
+          onClick={() => {
+            if (confirm(`Удалить контракт #${ct?.id}?`)) remove.mutate();
+          }}
+          disabled={remove.isPending || !ct}
+          className="btn btn-secondary inline-flex items-center gap-2 text-red-600 dark:text-red-400 disabled:opacity-40"
+        >
+          <Trash2 size={18} /> Удалить
+        </button>
+      )}
 
       {msg && <div className="p-3 bg-red-50 border border-red-300 text-red-800 rounded-lg">{msg}</div>}
 

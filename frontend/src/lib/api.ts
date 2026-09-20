@@ -87,6 +87,7 @@ export const guildsApi = {
       params: { is_enabled: isEnabled },
     }),
   discordRoles: (guildId: string) => api.get(`/guilds/${guildId}/discord-roles`),
+  dashboard: (guildId: string) => api.get(`/guilds/${guildId}/dashboard`),
   discordChannels: (guildId: string) => api.get(`/guilds/${guildId}/discord-channels`),
   botLogs: (guildId: string, limit = 100) =>
     api.get(`/guilds/${guildId}/bot-logs`, { params: { limit } }),
@@ -167,6 +168,14 @@ export const showcaseApi = {
   create: (data: any) => api.post('/showcase', data),
   update: (id: number, data: any) => api.put(`/showcase/${id}`, data),
   remove: (id: number) => api.delete(`/showcase/${id}`),
+};
+
+// Bonus API
+export const bonusApi = {
+  list: (guildId: string, params?: any) =>
+    api.get(`/guilds/${guildId}/bonus`, { params }),
+  submit: (guildId: string, week_start?: string, week_end?: string) =>
+    api.post(`/guilds/${guildId}/bonus`, { week_start, week_end }),
 };
 
 // Prices API

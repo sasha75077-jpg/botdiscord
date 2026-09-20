@@ -41,6 +41,10 @@ class RoleSync(commands.Cog):
             await rs.poll_site_contracts(self.bot)
         except Exception as e:
             print(f"[contracts-poll] warn: {e}")
+        try:
+            await rs.poll_site_bonus()
+        except Exception as e:
+            print(f"[bonus-poll] warn: {e}")
 
     @contracts_poll_loop.before_loop
     async def _before_contracts_poll(self):

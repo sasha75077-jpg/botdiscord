@@ -20,6 +20,7 @@ import ContractsPage from '@/pages/contracts/ContractsPage';
 import ContractDetailPage from '@/pages/contracts/ContractDetailPage';
 import NotificationsPage from '@/pages/admin/NotificationsPage';
 import PricesPage from '@/pages/PricesPage';
+import BonusPage from '@/pages/BonusPage';
 
 // Layouts
 import OwnerLayout from '@/layouts/OwnerLayout';
@@ -84,7 +85,8 @@ function App() {
           <Route path="/applications" element={<ApplicationsPage />} />
           <Route path="/applications/new" element={<NewApplicationPage />} />
           <Route path="/applications/:id" element={<ApplicationDetailPage />} />
-          <Route path="/reports" element={<div>Reports</div>} />
+          <Route path="/reports" element={<BonusPage />} />
+          <Route path="/users" element={<div>Users</div>} />
           <Route path="/users" element={<div>Users</div>} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/prices" element={<PricesPage />} />
@@ -108,6 +110,7 @@ function App() {
           <Route path="/applications/new" element={<NewApplicationPage />} />
           <Route path="/applications/:id" element={<ApplicationDetailPage />} />
           <Route path="/prices" element={<PricesPage />} />
+          <Route path="/reports" element={<BonusPage />} />
           <Route path="/profile" element={<div>My Profile</div>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
@@ -127,7 +130,7 @@ function App() {
         <Route path="/applications/new" element={<NewApplicationPage />} />
         <Route path="/applications/:id" element={<ApplicationDetailPage />} />
         <Route path="/prices" element={<PricesPage />} />
-        <Route path="/reports" element={<div>My Reports</div>} />
+        <Route path="/reports" element={<BonusPage />} />
         <Route path="/profile" element={<div>My Profile</div>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
