@@ -268,4 +268,77 @@ guilds.get('/:guildId/dashboard', async (c) => {
   })
 })
 
+// GET /guilds/:guildId/family - члены семьи (роль FAMQ) со статистикой (admin/owner)
+guilds.get('/:guildId/family', async (c) => {
+  const header = c.req.header('Authorization')
+  if (!header?.startsWith('Bearer ')) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+  const token = header.substring(7)
+  const isBot = !!c.env.SYNC_SECRET && token === c.env.SYNC_SECRET
+  if (!isBot) {
+    const payload: any = await verifyToken(token, c.env.SECRET_KEY)
+    if (!payload || (payload.role !== 'owner' && payload.role !== 'admin')) {
+      return c.json({ error: 'Admin access required' }, 403)
+    }
+    if (payload.role !== 'owner' && payload.guild_id !== c.req.param('guildId')) {
+      return c.json({ error: 'Forbidden' }, 403)
+    }
+  }
+
+  const guildId = c.req.param('guildId')
+  const famRow = await c.env.DB.prepare(
+    "SELECT setting_value FROM guild_settings WHERE guild_id = ? AND setting_key = 'family_member_role_ids'"
+  ).bind(guildId).first<{ setting_value: string }>()
+  const famIds = (famRow?.setting_value || '').split(',').map((s) => s.trim()).filter(Boolean)
+  if (famIds.length === 0) {
+    return c.json({ error: 'Не настроены семейные роли (страница Роли)' }, 400)
+  }
+  if (!c.env.DISCORD_BOT_TOKEN) {
+    return c.json({ error: 'Discord bot token not configured' }, 502)
+  }
+
+  const resp = await fetch(
+    `${c.env.DISCORD_API_ENDPOINT}/guilds/${guildId}/members?limit=1000`,
+    { headers: { Authorization: `Bot ${c.env.DISCORD_BOT_TOKEN}` } }
+  )
+  if (!resp.ok) {
+    return c.json({ error: 'Failed to fetch Discord members' }, 502)
+  }
+  const members = await resp.json<Array<{
+    user: { id: string; username: string; avatar: string | null };
+    roles: string[];
+  }>>()
+  const family = members.filter((m) => (m.roles || []).some((r) => famIds.includes(r)))
+
+  const perms = await c.env.DB.prepare(
+    'SELECT discord_id, role FROM permissions WHERE guild_id = ?'
+  ).bind(guildId).all()
+  const permMap: Record<string, string> = {}
+  for (const p of perms.results as Array<{ discord_id: string; role: string }>) {
+    permMap[p.discord_id] = p.role
+  }
+  const stats = await c.env.DB.prepare(
+    'SELECT discord_id, status, COUNT(*) as c FROM contracts WHERE guild_id = ? GROUP BY discord_id, status'
+  ).bind(guildId).all()
+  const statMap: Record<string, any> = {}
+  for (const s of stats.results as Array<{ discord_id: string; status: string; c: number }>) {
+    const e = (statMap[s.discord_id] = statMap[s.discord_id] || { total: 0, approved: 0, pending: 0, rejected: 0 })
+    e.total += s.c
+    if (s.status in e) e[s.status] = s.c
+  }
+
+  return c.json({
+    members: family.map((m) => ({
+      discord_id: m.user.id,
+      username: m.user.username,
+      avatar: m.user.avatar
+        ? `https://cdn.discordapp.com/avatars/${m.user.id}/${m.user.avatar}.png?size=128`
+        : null,
+      panel_role: permMap[m.user.id] || 'user',
+      contracts: statMap[m.user.id] || { total: 0, approved: 0, pending: 0, rejected: 0 },
+    })),
+  })
+})
+
 export const guildsRoutes = guilds

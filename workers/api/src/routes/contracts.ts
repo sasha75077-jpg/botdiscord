@@ -26,6 +26,7 @@ contracts.get('/:guildId/contracts/', async (c) => {
   if (!who) return c.json({ error: 'Forbidden' }, 403)
   const status = c.req.query('status')
   const contractType = c.req.query('contract_type')
+  const discordId = c.req.query('discord_id')
   const since = c.req.query('since')
   const limit = Math.min(parseInt(c.req.query('limit') || '200', 10) || 200, 500)
 
@@ -33,7 +34,7 @@ contracts.get('/:guildId/contracts/', async (c) => {
   const params: any[] = [guildId]
 
   if (who.role !== 'owner' && who.role !== 'bot' && who.role !== 'admin' && who.role !== 'recruiter') {
-    // Обычный юзер видит только свои
+    // Обычный юзер видит только свои (параметр игнорируется)
     if (!who.discord_id) return c.json({ error: 'Forbidden' }, 403)
     query += ' AND discord_id = ?'
     params.push(who.discord_id)
@@ -49,6 +50,11 @@ contracts.get('/:guildId/contracts/', async (c) => {
   if (contractType) {
     query += ' AND contract_type = ?'
     params.push(contractType)
+  }
+
+  if (discordId) {
+    query += ' AND discord_id = ?'
+    params.push(discordId)
   }
 
   if (since) {

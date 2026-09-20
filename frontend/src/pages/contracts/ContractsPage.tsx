@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { contractsApi } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
-import { FileText, Plus } from 'lucide-react';
+import { FileText, Plus, X } from 'lucide-react';
 
 const STATUS_TABS = [
   { id: undefined, name: 'Все' },
@@ -16,10 +16,12 @@ export default function ContractsPage() {
   const { user } = useAuthStore();
   const guildId = user?.guild_id || '';
   const [tab, setTab] = useState<string | undefined>('pending');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filterUser = searchParams.get('user') || '';
 
   const { data, isLoading } = useQuery({
-    queryKey: ['contracts', guildId, tab],
-    queryFn: async () => (await contractsApi.list(guildId, { status: tab })).data,
+    queryKey: ['contracts', guildId, tab, filterUser],
+    queryFn: async () => (await contractsApi.list(guildId, { status: tab, discord_id: filterUser || undefined })).data,
     enabled: !!guildId,
   });
 
@@ -50,6 +52,14 @@ export default function ContractsPage() {
             {t.name}
           </button>
         ))}
+        {filterUser && (
+          <button
+            onClick={() => setSearchParams({})}
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-gray-200 dark:bg-dark-600 flex items-center gap-1"
+          >
+            <X size={14} /> {filterUser}
+          </button>
+        )}
       </div>
 
       {isLoading ? (

@@ -18,6 +18,7 @@ import ApplicationsPage from '@/pages/applications/ApplicationsPage';
 import ApplicationDetailPage from '@/pages/applications/ApplicationDetailPage';
 import ContractsPage from '@/pages/contracts/ContractsPage';
 import ContractDetailPage from '@/pages/contracts/ContractDetailPage';
+import UsersPage from '@/pages/admin/UsersPage';
 import NotificationsPage from '@/pages/admin/NotificationsPage';
 import PricesPage from '@/pages/PricesPage';
 import BonusPage from '@/pages/BonusPage';
@@ -87,7 +88,7 @@ function App() {
           <Route path="/applications/new" element={<NewApplicationPage />} />
           <Route path="/applications/:id" element={<ApplicationDetailPage />} />
           <Route path="/reports" element={<BonusPage />} />
-          <Route path="/users" element={<div>Users</div>} />
+          <Route path="/users" element={<UsersPage />} />
           <Route path="/users" element={<div>Users</div>} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/prices" element={<PricesPage />} />
