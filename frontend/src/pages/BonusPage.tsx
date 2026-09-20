@@ -56,6 +56,11 @@ export default function BonusPage() {
 
   const reports: any[] = Array.isArray(data) ? data : [];
 
+  const weekSum = reports
+    .filter((r: any) => r.status === 'approved')
+    .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+  const weekCount = reports.filter((r: any) => r.status === 'approved').length;
+
   const exportTXT = () => {
     const params = new URLSearchParams();
     if (exportWeek.start) params.set('week_start', exportWeek.start);
@@ -100,6 +105,16 @@ export default function BonusPage() {
         Премия собирается только за текущую неделю. После понедельника 00:00 МСК неделя закрыта:
         принимать/отклонять нельзя, контракты в выплату не идут. Точную сумму с рангами считает бот при принятии в Discord.
       </p>
+
+      {!isStaff && reports.length > 0 && (
+        <div className="card bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border-green-200 dark:border-green-800">
+          <p className="text-sm text-green-700 dark:text-green-300 font-medium">Принято премий: {weekCount}</p>
+          <p className="text-3xl font-bold text-green-900 dark:text-green-100 mt-1">
+            {weekSum.toLocaleString('ru-RU')}
+          </p>
+          <p className="text-xs text-green-600 dark:text-green-400 mt-1">общая сумма принятых</p>
+        </div>
+      )}
 
       <div className="card">
         <label className="block text-sm font-medium mb-2">Мой static для выгрузки</label>

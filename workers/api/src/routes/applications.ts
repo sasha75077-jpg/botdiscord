@@ -144,6 +144,11 @@ apps.post('/:guildId/applications', async (c) => {
   if (u.user_type !== 'owner') {
     const block = await checkApplicant(c.env, guildId, u.discord_id)
     if (block) return c.json({ error: block }, 403)
+    // Уже принятая заявка есть - в семье, повторно нельзя
+    const accepted = await c.env.DB.prepare(
+      "SELECT id FROM applications WHERE guild_id = ? AND discord_id = ? AND status = 'approved' LIMIT 1"
+    ).bind(guildId, u.discord_id).first()
+    if (accepted) return c.json({ error: 'Твоя заявка уже принята - ты в семье' }, 403)
   }
 
   const body = await c.req.json<{ answers?: Record<string, string> }>()

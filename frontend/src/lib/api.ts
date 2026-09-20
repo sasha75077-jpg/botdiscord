@@ -97,6 +97,22 @@ export const guildsApi = {
 export const contractsApi = {
   create: (guildId: string, data: { contract_type: string; price?: number; nickname?: string; details?: Record<string, any> }) =>
     api.post(`/guilds/${guildId}/contracts/`, data),
+  createMultipart: async (guildId: string, form: FormData) => {
+    const base = api.defaults.baseURL || '';
+    const token = localStorage.getItem('access_token');
+    const resp = await fetch(`${base}/guilds/${guildId}/contracts/`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      const err: any = new Error((data as any).error || 'Ошибка отправки');
+      err.response = { data };
+      throw err;
+    }
+    return { data: await resp.json() };
+  },
   list: (guildId: string, params?: any) =>
     api.get(`/guilds/${guildId}/contracts/`, { params }),
   get: (guildId: string, contractId: number) =>

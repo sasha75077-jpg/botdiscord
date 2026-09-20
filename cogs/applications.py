@@ -282,11 +282,11 @@ class ApplicationModal(discord.ui.Modal):
                     f"❌ «{q.get('label')}» минимум {q['min']} символов", ephemeral=True)
             answers[str(q.get("id"))] = v
         dup = await fetch_one(
-            "SELECT id FROM applications WHERE guild_id=? AND discord_user_id=? AND status IN ('PENDING','CLAIMED') LIMIT 1",
+            "SELECT id FROM applications WHERE guild_id=? AND discord_user_id=? AND status IN ('PENDING','CLAIMED','ACCEPTED') LIMIT 1",
             (str(guild.id), str(interaction.user.id)),
         )
         if dup:
-            return await interaction.response.send_message("❌ У тебя уже есть открытая заявка.", ephemeral=True)
+            return await interaction.response.send_message("❌ У тебя уже есть открытая или принятая заявка.", ephemeral=True)
         app_id = str(uuid.uuid4())
         await execute(
             "INSERT INTO applications (id, discord_user_id, guild_id, created_at, status, answers) VALUES (?, ?, ?, ?, 'PENDING', ?)",

@@ -63,17 +63,46 @@ contracts.get('/:guildId/contracts/', async (c) => {
   return c.json(result.results)
 })
 
-// POST /guilds/:guildId/contracts/ - подача контракта с сайта
+// POST /guilds/:guildId/contracts/ - подача контракта с сайта (JSON или multipart со скринами).
+// Скрины грузятся в Discord-канал (contracts_upload_channel_id, иначе contracts_log_channel_id),
+// в базу едут только CDN-ссылки.
 contracts.post('/:guildId/contracts/', async (c) => {
   const guildId = c.req.param('guildId')
   const who = await caller(c, c.env)
   if (!who || !who.discord_id) return c.json({ error: 'Forbidden' }, 403)
   if (who.role !== 'owner' && who.guild_id !== guildId) return c.json({ error: 'Forbidden' }, 403)
 
-  const body = await c.req.json<{
-    contract_type: string; price?: number; nickname?: string; details?: Record<string, any>;
-  }>()
-  const contractType = (body.contract_type || '').trim()
+  const contentType = c.req.header('Content-Type') || ''
+  let contractType = ''
+  let price: number | undefined
+  let nickname: string | undefined
+  let details: Record<string, any> = {}
+  let files: File[] = []
+
+  if (contentType.includes('multipart/form-data')) {
+    const form = await c.req.parseBody()
+    try {
+      const payload = JSON.parse(String(form['payload'] || '{}'))
+      contractType = String(payload.contract_type || '').trim()
+      price = payload.price !== undefined ? Number(payload.price) : undefined
+      nickname = payload.nickname ? String(payload.nickname) : undefined
+      details = payload.details || {}
+    } catch {
+      return c.json({ error: 'Bad payload' }, 400)
+    }
+    for (const [k, v] of Object.entries(form)) {
+      if (k.startsWith('file_') && v instanceof File) files.push(v)
+    }
+  } else {
+    const body = await c.req.json<{
+      contract_type: string; price?: number; nickname?: string; details?: Record<string, any>;
+    }>()
+    contractType = String(body.contract_type || '').trim()
+    price = body.price
+    nickname = body.nickname
+    details = body.details || {}
+  }
+
   if (!ALL_TYPES.includes(contractType)) {
     return c.json({ error: 'Неизвестный тип контракта' }, 400)
   }
@@ -92,10 +121,59 @@ contracts.post('/:guildId/contracts/', async (c) => {
     if (!member) return c.json({ error: 'Отправлять могут только участники сервера' }, 403)
   }
 
+  // Сколько скринов нужно: товары - 2 окна (хватит 1), маркетплейс - 0, остальные - 1+
+  const needFiles = contractType === 'агитации-маркетплейс' ? 0 : contractType === 'товары' ? 1 : 1
+  const maxFiles = contractType === 'товары' ? 2 : 10
+  if (files.length < needFiles) {
+    return c.json({ error: 'Прикрепи скриншот' }, 400)
+  }
+  if (files.length > maxFiles) {
+    return c.json({ error: `Максимум файлов: ${maxFiles}` }, 400)
+  }
+  for (const f of files) {
+    if (f.size > 8 * 1024 * 1024) {
+      return c.json({ error: `Файл ${f.name} больше 8 МБ` }, 413)
+    }
+  }
+
+  // Заливка в Discord-канал
+  const attachments: string[] = []
+  if (files.length > 0) {
+    if (!c.env.DISCORD_BOT_TOKEN) {
+      return c.json({ error: 'Загрузка скринов не настроена' }, 502)
+    }
+    const srow = await c.env.DB.prepare(
+      "SELECT setting_key, setting_value FROM guild_settings WHERE guild_id = ? AND setting_key IN ('contracts_upload_channel_id', 'contracts_log_channel_id')"
+    ).bind(guildId).all()
+    const sMap: Record<string, string> = {}
+    for (const r of srow.results as Array<{ setting_key: string; setting_value: string }>) {
+      sMap[r.setting_key] = r.setting_value
+    }
+    const channelId = sMap['contracts_upload_channel_id'] || sMap['contracts_log_channel_id']
+    if (!channelId) {
+      return c.json({ error: 'Не настроен канал загрузки скринов (админ: Уведомления)' }, 400)
+    }
+    const fd = new FormData()
+    fd.append('content', `Контракт ${contractType} от <@${who.discord_id}> (сайт)`)
+    files.forEach((f, i) => fd.append(`files[${i}]`, f, f.name))
+    const up = await fetch(`${c.env.DISCORD_API_ENDPOINT}/channels/${channelId}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bot ${c.env.DISCORD_BOT_TOKEN}` },
+      body: fd,
+    })
+    if (!up.ok) {
+      return c.json({ error: 'Не смог загрузить скрины в Discord' }, 502)
+    }
+    const msg = await up.json<{ attachments: Array<{ url: string }> }>()
+    for (const a of msg.attachments || []) attachments.push(a.url)
+  }
+
   const res = await c.env.DB.prepare(
-    'INSERT INTO contracts (guild_id, discord_id, contract_type, nickname, price, status, details) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).bind(guildId, who.discord_id, contractType, body.nickname || who.discord_id,
-    body.price ?? 0, 'pending', body.details ? JSON.stringify(body.details) : null).run()
+    'INSERT INTO contracts (guild_id, discord_id, contract_type, nickname, price, status, details, screenshot_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(guildId, who.discord_id, contractType, nickname || who.discord_id,
+    price ?? 0, 'pending',
+    JSON.stringify({ ...details, attachments }),
+    attachments[0] || null).run()
   const row = await c.env.DB.prepare('SELECT * FROM contracts WHERE id = ?')
     .bind(res.meta.last_row_id).first()
   return c.json(row)

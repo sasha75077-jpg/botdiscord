@@ -17,6 +17,7 @@ export default function NotificationsPage() {
   const guildId = user?.guild_id || '';
   const [logChannel, setLogChannel] = useState('');
   const [pricesChannel, setPricesChannel] = useState('');
+  const [uploadChannel, setUploadChannel] = useState('');
   const [pingIds, setPingIds] = useState<string[]>([]);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -40,6 +41,7 @@ export default function NotificationsPage() {
     const s = settings?.settings || {};
     setLogChannel(s.contracts_log_channel_id || '');
     setPricesChannel(s.prices_panel_channel_id || '');
+    setUploadChannel(s.contracts_upload_channel_id || '');
     setPingIds(String(s.contracts_ping_role_ids || '').split(',').map((x: string) => x.trim()).filter(Boolean));
   }, [settings]);
 
@@ -48,6 +50,7 @@ export default function NotificationsPage() {
       guildsApi.updateSettings(guildId, {
         contracts_log_channel_id: logChannel,
         prices_panel_channel_id: pricesChannel,
+        contracts_upload_channel_id: uploadChannel,
         contracts_ping_role_ids: pingIds.join(','),
       }),
     onSuccess: () => {
@@ -103,6 +106,20 @@ export default function NotificationsPage() {
         <label className="block text-sm font-medium mb-2">Канал</label>
         <select value={pricesChannel} onChange={(e) => setPricesChannel(e.target.value)} className="input w-full max-w-md">
           <option value="">— не выбран —</option>
+          {channels.map((ch: any) => (
+            <option key={ch.id} value={ch.id}># {ch.name}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="card">
+        <h2 className="text-xl font-bold mb-1">Канал загрузки скринов</h2>
+        <p className="text-sm text-gray-500 mb-3">
+          Сюда сайт заливает скриншоты контрактов (иначе забьет базу). Если пуст — используется лог-канал.
+        </p>
+        <label className="block text-sm font-medium mb-2">Канал</label>
+        <select value={uploadChannel} onChange={(e) => setUploadChannel(e.target.value)} className="input w-full max-w-md">
+          <option value="">— как лог-канал —</option>
           {channels.map((ch: any) => (
             <option key={ch.id} value={ch.id}># {ch.name}</option>
           ))}

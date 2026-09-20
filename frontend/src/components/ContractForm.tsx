@@ -1,13 +1,18 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useAuthStore } from '@/store/authStore';
 import { contractsApi, pricesApi } from '@/lib/api';
-import { AlertCircle, CheckCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle, Upload, X } from 'lucide-react';
 
 interface ContractFormProps {
   guildId: string;
   onSuccess?: () => void;
   restrictedToAgitation?: boolean; // true для recruiter
+}
+
+interface FileItem {
+  file: File;
+  preview: string;
+  slot: string; // delivery | loading | main
 }
 
 const CONTRACT_TYPES = [
@@ -22,11 +27,14 @@ const CONTRACT_TYPES = [
   { value: 'тюнинг', label: 'Тюнинг', recruiterOnly: false },
 ];
 
+const MAX_FILE = 8 * 1024 * 1024;
+
 export default function ContractForm({ guildId, onSuccess, restrictedToAgitation = false }: ContractFormProps) {
   const [contractType, setContractType] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [files, setFiles] = useState<FileItem[]>([]);
 
   const [price, setPrice] = useState('');
   const [fishType, setFishType] = useState('');
@@ -60,7 +68,7 @@ export default function ContractForm({ guildId, onSuccess, restrictedToAgitation
       case 'тюнинг':
         return `Выплата: ${fmt(priceMap['tuning:with_screenshot'] || 0)}`;
       case 'ателье':
-        return `Выплата за форму: ${fmt(priceMap['atelier:uniform'] ?? priceMap['atelier.uniform'] ?? 0)}`;
+        return `Выплата за форму: ${fmt(priceMap['atelier.uniform'] || 0)}`;
       case 'агитации-маркетплейс':
         return `Выплата за ссылку: ${fmt(priceMap['agit:marketplace_link'] || 0)}`;
       case 'агитации-wn':
@@ -74,26 +82,50 @@ export default function ContractForm({ guildId, onSuccess, restrictedToAgitation
         return key ? `Выплата: ${fmt(priceMap[key] || 0)}` : null;
       }
       case 'товары':
-        return `Доставка ${fmt(priceMap['goods.delivery'] ?? priceMap['goods:delivery'] ?? 0)} / погрузка ${fmt(priceMap['goods.loading'] ?? priceMap['goods:loading'] ?? 0)}`;
+        return `Доставка ${fmt(priceMap['goods.delivery'] || 0)} / погрузка ${fmt(priceMap['goods.loading'] || 0)}`;
       default:
         return null;
     }
   };
 
-  const availableTypes = restrictedToAgitation
-    ? CONTRACT_TYPES.filter(t => t.recruiterOnly)
-    : CONTRACT_TYPES.filter(t => !t.recruiterOnly);
+  const addFiles = (list: FileList | null, slot: string) => {
+    if (!list) return;
+    const items: FileItem[] = [];
+    for (const f of Array.from(list)) {
+      if (!f.type.startsWith('image/')) {
+        setError(`Файл ${f.name} — не картинка`);
+        continue;
+      }
+      if (f.size > MAX_FILE) {
+        setError(`Файл ${f.name} больше 8 МБ`);
+        continue;
+      }
+      items.push({ file: f, preview: URL.createObjectURL(f), slot });
+    }
+    setFiles((prev) => [...prev, ...items].slice(0, 10));
+  };
+
+  const removeFile = (index: number) => {
+    setFiles((prev) => {
+      const updated = [...prev];
+      URL.revokeObjectURL(updated[index].preview);
+      updated.splice(index, 1);
+      return updated;
+    });
+  };
 
   const validate = (): { fields: Record<string, any>; price?: number } | string => {
     if (!contractType) return 'Выберите тип контракта';
     const fields: Record<string, any> = {};
     let priceNum: number | undefined;
+    const n = files.length;
 
     switch (contractType) {
       case 'активация': {
         priceNum = Number(price);
         if (!priceNum || priceNum <= 0) return 'Укажите сумму (целое число > 0)';
         if (priceNum > 20000) return 'Сумма не должна превышать 20000';
+        if (n !== 1) return 'Прикрепи 1 скриншот';
         fields.price = priceNum;
         break;
       }
@@ -101,12 +133,14 @@ export default function ContractForm({ guildId, onSuccess, restrictedToAgitation
         if (!fishType.trim()) return 'Укажите вид рыбы';
         const qty = Number(fishQty);
         if (!qty || qty <= 0) return 'Укажите количество (целое число > 0)';
+        if (n < 1 || n > 10) return 'Нужно 1..10 скриншотов';
         fields.fishType = fishType.trim();
         fields.fishQty = qty;
         break;
       }
       case 'металлургия-сдача': {
         if (!oreType) return 'Выберите руду';
+        if (n !== 1) return 'Прикрепи 1 скриншот';
         fields.oreType = oreType;
         break;
       }
@@ -119,13 +153,20 @@ export default function ContractForm({ guildId, onSuccess, restrictedToAgitation
         if (!Object.values(fields).some((v) => (v as number) > 0)) {
           return 'Укажите количество хотя бы для одного ресурса';
         }
+        if (n < 1 || n > 10) return 'Нужно 1..10 скриншотов';
         break;
       }
-      case 'товары':
+      case 'товары': {
+        const hasDelivery = files.some((f) => f.slot === 'delivery');
+        const hasLoading = files.some((f) => f.slot === 'loading');
+        if (!hasDelivery && !hasLoading) return 'Прикрепи скрин погрузки или доставки';
+        if (n > 2) return 'Максимум 2 скриншота';
         break;
+      }
       case 'ателье': {
         const total = Number(totalUniforms);
         if (!total || total <= 0) return 'Укажите общее количество (целое число > 0)';
+        if (n < 1 || n > 10) return 'Нужно 1..10 скриншотов';
         fields.totalUniforms = total;
         break;
       }
@@ -138,6 +179,7 @@ export default function ContractForm({ guildId, onSuccess, restrictedToAgitation
           if (!priceNum || priceNum <= 0) return 'Укажите сумму за контракт';
           fields.price = priceNum;
         }
+        if (n > 0) return 'Скриншоты не требуются';
         break;
       }
       case 'агитации-wn': {
@@ -148,10 +190,13 @@ export default function ContractForm({ guildId, onSuccess, restrictedToAgitation
           if (!priceNum || priceNum <= 0) return 'Укажите сумму за контракт';
           fields.price = priceNum;
         }
+        if (n < 1 || n > 10) return 'Нужно 1..10 скриншотов';
         break;
       }
-      case 'тюнинг':
+      case 'тюнинг': {
+        if (n !== 1) return 'Прикрепи 1 скриншот';
         break;
+      }
       default:
         return 'Неизвестный тип контракта';
     }
@@ -170,12 +215,17 @@ export default function ContractForm({ guildId, onSuccess, restrictedToAgitation
     }
     setLoading(true);
     try {
-      await contractsApi.create(guildId, {
+      const form = new FormData();
+      form.append('payload', JSON.stringify({
         contract_type: contractType,
         price: v.price,
         details: v.fields,
-      });
+      }));
+      files.forEach((f, i) => form.append(`file_${i}`, f.file, f.file.name));
+      await contractsApi.createMultipart(guildId, form);
       setSuccess(true);
+      files.forEach((f) => URL.revokeObjectURL(f.preview));
+      setFiles([]);
       if (onSuccess) onSuccess();
     } catch (err: any) {
       setError(err.response?.data?.error || err.response?.data?.detail || 'Ошибка отправки');
@@ -184,11 +234,36 @@ export default function ContractForm({ guildId, onSuccess, restrictedToAgitation
     }
   };
 
+  const availableTypes = restrictedToAgitation
+    ? CONTRACT_TYPES.filter(t => t.recruiterOnly)
+    : CONTRACT_TYPES.filter(t => !t.recruiterOnly);
+
   const num = (label: string, value: string, set: (v: string) => void) => (
     <div>
       <label className="block text-sm font-medium mb-2">{label}</label>
       <input type="number" value={value} onChange={(e) => set(e.target.value)}
         className="input w-full" placeholder="0" min="0" />
+    </div>
+  );
+
+  const fileBox = (slot: string, title: string) => (
+    <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-4 text-center">
+      <p className="text-sm font-medium mb-2">{title}</p>
+      <label className="cursor-pointer">
+        <span className="text-primary-600 dark:text-primary-400 hover:underline text-sm">Выбрать файлы</span>
+        <input type="file" accept="image/*" multiple onChange={(e) => addFiles(e.target.files, slot)} className="hidden" />
+      </label>
+      <div className="flex flex-wrap gap-2 justify-center mt-2">
+        {files.map((f, i) => f.slot === slot && (
+          <div key={i} className="relative">
+            <img src={f.preview} alt="" className="w-20 h-20 object-cover rounded-lg" />
+            <button type="button" onClick={() => removeFile(i)}
+              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center">
+              <X size={12} />
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 
@@ -209,7 +284,7 @@ export default function ContractForm({ guildId, onSuccess, restrictedToAgitation
 
       <div>
         <label className="block text-sm font-medium mb-2">Тип контракта <span className="text-red-500">*</span></label>
-        <select value={contractType} onChange={(e) => setContractType(e.target.value)} className="input w-full" required>
+        <select value={contractType} onChange={(e) => { setContractType(e.target.value); setFiles([]); }} className="input w-full" required>
           <option value="">— выбери тип —</option>
           {availableTypes.map((t) => (
             <option key={t.value} value={t.value}>{t.label}</option>
@@ -274,9 +349,23 @@ export default function ContractForm({ guildId, onSuccess, restrictedToAgitation
         </div>
       )}
 
-      <p className="text-sm text-gray-500">
-        Скриншоты прикладывай в Discord-канале контрактов — на сайте пока только данные.
-      </p>
+      {contractType && contractType !== 'агитации-маркетплейс' && (
+        <div className="space-y-3">
+          <p className="text-sm font-medium flex items-center gap-2">
+            <Upload size={16} /> Скриншоты <span className="text-red-500">*</span>
+          </p>
+          {contractType === 'товары' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {fileBox('loading', 'Погрузка')}
+              {fileBox('delivery', 'Доставка')}
+            </div>
+          ) : (
+            fileBox('main', 'Прикрепи скриншоты')
+          )}
+          <p className="text-xs text-gray-500">До 8 МБ каждый. Улетят в Discord-канал, в базе только ссылки.</p>
+        </div>
+      )}
+
       {payoutHint() && (
         <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
           <p className="text-green-800 dark:text-green-200 font-semibold">💰 {payoutHint()}</p>

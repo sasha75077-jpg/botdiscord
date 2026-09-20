@@ -4,6 +4,39 @@ import { pricesApi } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { Banknote, Save, CheckCircle, AlertTriangle } from 'lucide-react';
 
+const PRICE_LABELS: Record<string, string> = {
+  'agit:wn_green': 'Агитации WN: зелёная',
+  'agit:wn_notice': 'Агитации WN: объявление',
+  'agit:marketplace_link': 'Агитации: маркетплейс',
+  'atelier.uniform': 'Ателье: форма',
+  'goods.delivery': 'Товары: доставка',
+  'goods.loading': 'Товары: погрузка',
+  'ore.delivery.copper': 'Руда: сдача Медь',
+  'ore.delivery.gold': 'Руда: сдача Золото',
+  'ore.delivery.iron': 'Руда: сдача Железо',
+  'ore.delivery.silver': 'Руда: сдача Серебро',
+  'ore.delivery.tin': 'Руда: сдача Олово',
+  'tuning:with_screenshot': 'Тюнинг: со скриншотом',
+  'ore_unit:copper': 'Добыча руды: Медь',
+  'ore_unit:gold': 'Добыча руды: Золото',
+  'ore_unit:iron': 'Добыча руды: Железо',
+  'ore_unit:silver': 'Добыча руды: Серебро',
+  'ore_unit:tin': 'Добыча руды: Олово',
+};
+
+const CATEGORIES: Array<{ name: string; match: (k: string) => boolean }> = [
+  { name: 'Агитации', match: (k) => k.startsWith('agit:') },
+  { name: 'Товары', match: (k) => k.startsWith('goods.') },
+  { name: 'Ателье', match: (k) => k.startsWith('atelier.') },
+  { name: 'Тюнинг', match: (k) => k.startsWith('tuning:') },
+  { name: 'Руда (сдача)', match: (k) => k.startsWith('ore.delivery.') },
+  { name: 'Руда (добыча)', match: (k) => k.startsWith('ore_unit:') },
+];
+
+function labelOf(key: string): string {
+  return PRICE_LABELS[key] || key;
+}
+
 export default function PricesPage() {
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
@@ -18,6 +51,11 @@ export default function PricesPage() {
 
   const items: Array<{ item_key: string; price: number }> = data?.prices || [];
   const shown: Record<string, string> = draft ?? Object.fromEntries(items.map((i) => [i.item_key, String(i.price ?? 0)]));
+  const groups = CATEGORIES.map((c) => ({
+    ...c,
+    rows: items.filter((i) => c.match(i.item_key)),
+  })).filter((g) => g.rows.length > 0);
+  const other = items.filter((i) => !CATEGORIES.some((c) => c.match(i.item_key)));
 
   const save = useMutation({
     mutationFn: async () => {
@@ -59,28 +97,58 @@ export default function PricesPage() {
       {isLoading ? (
         <p className="text-gray-500">Загрузка...</p>
       ) : (
-        <div className="card">
-          <div className="space-y-2">
-            {items.map((i) => (
-              <div key={i.item_key} className="flex items-center gap-3">
-                <p className="flex-1 font-mono text-sm truncate">{i.item_key}</p>
-                {canEdit ? (
-                  <input
-                    type="number"
-                    min="0"
-                    value={shown[i.item_key] ?? ''}
-                    onChange={(e) => setDraft({ ...shown, [i.item_key]: e.target.value })}
-                    className="input w-36 text-right"
-                  />
-                ) : (
-                  <p className="font-bold w-36 text-right">
-                    {Number(i.price ?? 0).toLocaleString('ru-RU')}
-                  </p>
-                )}
+        <>
+          {groups.map((g) => (
+            <div className="card" key={g.name}>
+              <h2 className="text-xl font-bold mb-3">{g.name}</h2>
+              <div className="space-y-2">
+                {g.rows.map((i) => (
+                  <div key={i.item_key} className="flex items-center gap-3">
+                    <p className="flex-1 text-sm truncate" title={i.item_key}>{labelOf(i.item_key)}</p>
+                    {canEdit ? (
+                      <input
+                        type="number"
+                        min="0"
+                        value={shown[i.item_key] ?? ''}
+                        onChange={(e) => setDraft({ ...shown, [i.item_key]: e.target.value })}
+                        className="input w-36 text-right"
+                      />
+                    ) : (
+                      <p className="font-bold w-36 text-right">
+                        {Number(i.price ?? 0).toLocaleString('ru-RU')}
+                      </p>
+                    )}
+                  </div>
+                ))}
               </div>
-            ))}
-            {items.length === 0 && <p className="text-gray-500">Пусто.</p>}
-          </div>
+            </div>
+          ))}
+          {other.length > 0 && (
+            <div className="card">
+              <h2 className="text-xl font-bold mb-3">Прочее</h2>
+              <div className="space-y-2">
+                {other.map((i) => (
+                  <div key={i.item_key} className="flex items-center gap-3">
+                    <p className="flex-1 font-mono text-sm truncate" title={i.item_key}>{i.item_key}</p>
+                    {canEdit ? (
+                      <input
+                        type="number"
+                        min="0"
+                        value={shown[i.item_key] ?? ''}
+                        onChange={(e) => setDraft({ ...shown, [i.item_key]: e.target.value })}
+                        className="input w-36 text-right"
+                      />
+                    ) : (
+                      <p className="font-bold w-36 text-right">
+                        {Number(i.price ?? 0).toLocaleString('ru-RU')}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {items.length === 0 && <p className="text-gray-500">Пусто.</p>}
           {canEdit && (
             <button
               onClick={() => save.mutate()}
@@ -90,7 +158,7 @@ export default function PricesPage() {
               <Save size={18} /> Сохранить цены
             </button>
           )}
-        </div>
+        </>
       )}
     </div>
   );

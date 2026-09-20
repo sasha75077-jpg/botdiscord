@@ -21,6 +21,7 @@ import ContractDetailPage from '@/pages/contracts/ContractDetailPage';
 import NotificationsPage from '@/pages/admin/NotificationsPage';
 import PricesPage from '@/pages/PricesPage';
 import BonusPage from '@/pages/BonusPage';
+import ProfilePage from '@/pages/ProfilePage';
 
 // Layouts
 import OwnerLayout from '@/layouts/OwnerLayout';
@@ -111,7 +112,7 @@ function App() {
           <Route path="/applications/:id" element={<ApplicationDetailPage />} />
           <Route path="/prices" element={<PricesPage />} />
           <Route path="/reports" element={<BonusPage />} />
-          <Route path="/profile" element={<div>My Profile</div>} />
+          <Route path="/profile" element={<ProfilePage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </UserLayout>
@@ -131,7 +132,7 @@ function App() {
         <Route path="/applications/:id" element={<ApplicationDetailPage />} />
         <Route path="/prices" element={<PricesPage />} />
         <Route path="/reports" element={<BonusPage />} />
-        <Route path="/profile" element={<div>My Profile</div>} />
+        <Route path="/profile" element={<ProfilePage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </UserLayout>
