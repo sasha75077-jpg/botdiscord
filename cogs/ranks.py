@@ -155,4 +155,10 @@ async def create_promo_report(discord_id: str, guild_id: str, system_type: str):
         "SELECT report_id FROM promotion_reports WHERE guild_id = ? AND discord_id = ? ORDER BY report_id DESC LIMIT 1",
         (guild_id, discord_id),
     )
+    try:
+        from services.api_sync import queue_promo_sync
+        queue_promo_sync(str(guild_id), rep["report_id"], str(discord_id),
+                         from_rank=u["current_rank_id"], to_rank=nxt["rank_id"], status="NEW")
+    except Exception as e:
+        print(f"[api_sync] warn: {e}")
     return {"ok": True, "report_id": rep["report_id"]}

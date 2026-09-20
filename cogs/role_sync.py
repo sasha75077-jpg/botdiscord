@@ -17,6 +17,10 @@ class RoleSync(commands.Cog):
     async def reconcile_loop(self):
         for guild in self.bot.guilds:
             try:
+                await rs.pull_remote_state(str(guild.id))
+            except Exception as e:
+                print(f"[role-sync] warn pull {guild.id}: {e}")
+            try:
                 await rs.reconcile_guild(self.bot, guild)
             except Exception as e:
                 print(f"[role-sync] warn guild {guild.id}: {e}")

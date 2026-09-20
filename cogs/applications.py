@@ -242,6 +242,11 @@ class ApplicationsCog(commands.Cog):
                     "VALUES (?, ?, ?, 'PENDING', ?, ?)",
                     (app_id, str(cand_id), now_iso(), str(ch.id), str(msg.id)),
                 )
+                try:
+                    from services.api_sync import queue_application_sync
+                    queue_application_sync(str(ch.guild.id), app_id, str(cand_id), "PENDING")
+                except Exception as e:
+                    print(f"[api_sync] warn: {e}")
                 await self.refresh_message(app_id)
                 continue
 
@@ -261,6 +266,11 @@ class ApplicationsCog(commands.Cog):
                     "VALUES (?, ?, ?, 'PENDING', ?, ?)",
                     (app_id, str(cand_id), now_iso(), str(ch.id), str(panel_msg.id)),
                 )
+                try:
+                    from services.api_sync import queue_application_sync
+                    queue_application_sync(str(ch.guild.id), app_id, str(cand_id), "PENDING")
+                except Exception as e:
+                    print(f"[api_sync] warn: {e}")
 
                 await self.refresh_message(app_id)
 
@@ -392,6 +402,11 @@ class ApplicationsCog(commands.Cog):
                 "UPDATE applications SET status='REJECTED', decided_by=?, decided_at=?, decision_reason=? WHERE id=?",
                 (str(recruiter.id), now_iso(), "Кандидат покинул сервер", app_id),
             )
+            try:
+                from services.api_sync import queue_application_sync
+                queue_application_sync(str(guild.id), app_id, str(cand_id), "REJECTED", "Кандидат покинул сервер")
+            except Exception as e:
+                print(f"[api_sync] warn: {e}")
             await self.refresh_message(
                 app_id,
                 remove_buttons=True,
@@ -404,6 +419,11 @@ class ApplicationsCog(commands.Cog):
             "UPDATE applications SET status='CLAIMED', claimed_by=?, claimed_at=? WHERE id=?",
             (str(recruiter.id), now_iso(), app_id),
         )
+        try:
+            from services.api_sync import queue_application_sync
+            queue_application_sync(str(guild.id), app_id, str(cand_id), "CLAIMED")
+        except Exception as e:
+            print(f"[api_sync] warn: {e}")
 
         temp_role = guild.get_role(TEMP_CALL_ROLE_ID)
         if temp_role and temp_role not in member.roles:
@@ -466,6 +486,11 @@ class ApplicationsCog(commands.Cog):
                 "UPDATE applications SET status='REJECTED', decided_by=?, decided_at=?, decision_reason=? WHERE id=?",
                 (str(interaction.user.id), now_iso(), "Кандидат покинул сервер", app_id),
             )
+            try:
+                from services.api_sync import queue_application_sync
+                queue_application_sync(str(guild.id), app_id, str(cand_id), "REJECTED", "Кандидат покинул сервер")
+            except Exception as e:
+                print(f"[api_sync] warn: {e}")
             await self.refresh_message(
                 app_id,
                 remove_buttons=True,
@@ -479,6 +504,11 @@ class ApplicationsCog(commands.Cog):
             "UPDATE applications SET status=?, decided_by=?, decided_at=?, decision_reason=? WHERE id=?",
             (new_status, str(interaction.user.id), now_iso(), reason, app_id),
         )
+        try:
+            from services.api_sync import queue_application_sync
+            queue_application_sync(str(guild.id), app_id, str(cand_id), new_status, reason)
+        except Exception as e:
+            print(f"[api_sync] warn: {e}")
 
         temp_role = guild.get_role(TEMP_CALL_ROLE_ID)
         if temp_role and temp_role in member.roles:
@@ -628,6 +658,11 @@ class ApplicationsCog(commands.Cog):
                 "VALUES (?, ?, ?, 'PENDING', ?, ?)",
                 (app_id, str(cand_id), now_iso(), str(message.channel.id), str(panel_msg.id)),
             )
+            try:
+                from services.api_sync import queue_application_sync
+                queue_application_sync(str(message.guild.id), app_id, str(cand_id), "PENDING")
+            except Exception as e:
+                print(f"[api_sync] warn: {e}")
 
             await self.refresh_message(app_id)
 

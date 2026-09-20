@@ -85,6 +85,63 @@ async def bot_log(bot, guild_id, message, level="error", source="role-sync"):
         print(f"[role-sync] warn log audit: {e}")
 
 
+async def pull_remote_state(guild_id):
+    """Подтянуть настройки/модули с сайта в локальную БД.
+
+    Настройки: побеждает более свежий updated_at (UTC с обеих сторон).
+    Модули: сайт - единственный писатель, применяется как есть.
+    Возвращает кол-во примененных изменений.
+    """
+    applied = 0
+    try:
+        data = await asyncio.to_thread(_api_get, f"/guilds/{guild_id}/settings")
+    except Exception as e:
+        print(f"[role-sync] warn pull settings: {e}")
+        return 0
+    remote = (data or {}).get("settings", {}) or {}
+    remote_updated = (data or {}).get("updated_at", {}) or {}
+    if remote:
+        local_rows = await fetch_all(
+            "SELECT setting_key, setting_value, updated_at FROM guild_settings WHERE guild_id = ?",
+            (guild_id,),
+        )
+        local = {r["setting_key"]: r for r in local_rows}
+        for key, value in remote.items():
+            if value is None:
+                continue
+            cur = local.get(key)
+            r_updated = str(remote_updated.get(key) or "")
+            l_updated = str((cur or {}).get("updated_at") or "")
+            if cur is None or (r_updated and r_updated >= l_updated):
+                if cur is None or str(cur.get("setting_value") or "") != str(value):
+                    await execute(
+                        """INSERT INTO guild_settings (guild_id, setting_key, setting_value, updated_at)
+                           VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                           ON CONFLICT(guild_id, setting_key) DO UPDATE SET
+                               setting_value = excluded.setting_value,
+                               updated_at = CURRENT_TIMESTAMP""",
+                        (guild_id, key, str(value)),
+                    )
+                    applied += 1
+    try:
+        mdata = await asyncio.to_thread(_api_get, f"/guilds/{guild_id}/modules")
+    except Exception as e:
+        print(f"[role-sync] warn pull modules: {e}")
+        return applied
+    for m in (mdata or {}).get("modules", []) or []:
+        try:
+            await execute(
+                """INSERT INTO guild_modules (guild_id, module_name, is_enabled)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(guild_id, module_name) DO UPDATE SET is_enabled = ?""",
+                (guild_id, m["module_name"], 1 if m["is_enabled"] else 0,
+                 1 if m["is_enabled"] else 0),
+            )
+        except Exception as e:
+            print(f"[role-sync] warn pull module {m}: {e}")
+    return applied
+
+
 async def get_mapping(guild_id):
     """{admin_ids: [...], recruit_ids: [...]} - API приоритет, локально fallback."""
     remote = {}

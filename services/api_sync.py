@@ -31,21 +31,67 @@ def _post(path: str, payload: dict):
         print(f"[api_sync] warn: {e}")
 
 
-def queue_contract_sync(guild_id, ts, discord_id, contract_type,
-                        price=0, nickname=None, status="PENDING"):
-    """Поставить синхронизацию контракта в очередь (не блокирует бота)."""
-    if not SYNC_SECRET or not guild_id or not ts or not discord_id or not contract_type:
+def queue_sync(path: str, payload: dict):
+    """Общая постановка синка в очередь (не блокирует бота)."""
+    if not SYNC_SECRET or not payload:
         return
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         return
-    payload = {
+    loop.create_task(asyncio.to_thread(_post, path, payload))
+
+
+def queue_contract_sync(guild_id, ts, discord_id, contract_type,
+                        price=0, nickname=None, status="PENDING"):
+    """Поставить синхронизацию контракта в очередь (не блокирует бота)."""
+    if not guild_id or not ts or not discord_id or not contract_type:
+        return
+    queue_sync(f"/guilds/{guild_id}/contracts/sync", {
         "ts": str(ts),
         "discord_id": str(discord_id),
         "contract_type": str(contract_type),
         "price": price or 0,
         "nickname": str(nickname) if nickname else None,
         "status": status or "PENDING",
-    }
-    loop.create_task(asyncio.to_thread(_post, f"/guilds/{guild_id}/contracts/sync", payload))
+    })
+
+
+def queue_application_sync(guild_id, app_id, discord_id, status="PENDING", reason=None):
+    """Синхронизация заявки (external_id = uuid бота)."""
+    if not guild_id or not app_id or not discord_id:
+        return
+    queue_sync(f"/guilds/{guild_id}/applications/sync", {
+        "external_id": str(app_id),
+        "discord_id": str(discord_id),
+        "status": status or "PENDING",
+        "reason": reason,
+    })
+
+
+def queue_bonus_sync(guild_id, report_id, discord_id, amount=0, status="NEW", reason=None):
+    """Синхронизация премии (external_id = report_id бота)."""
+    if not guild_id or not report_id or not discord_id:
+        return
+    queue_sync(f"/guilds/{guild_id}/bonus-reports/sync", {
+        "external_id": str(report_id),
+        "discord_id": str(discord_id),
+        "amount": amount or 0,
+        "status": status or "NEW",
+        "reason": reason,
+    })
+
+
+def queue_promo_sync(guild_id, report_id, discord_id, from_rank=None, to_rank=None,
+                     status="NEW", reason=None):
+    """Синхронизация повышения (external_id = report_id бота)."""
+    if not guild_id or not report_id or not discord_id:
+        return
+    queue_sync(f"/guilds/{guild_id}/promotion-reports/sync", {
+        "external_id": str(report_id),
+        "discord_id": str(discord_id),
+        "from_rank": str(from_rank) if from_rank is not None else None,
+        "to_rank": str(to_rank) if to_rank is not None else None,
+        "status": status or "NEW",
+        "reason": reason,
+    })

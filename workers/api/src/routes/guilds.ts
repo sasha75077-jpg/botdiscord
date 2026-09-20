@@ -41,14 +41,16 @@ guilds.get('/:guildId/settings', async (c) => {
 
   const settings = await c.env.DB.prepare(
     'SELECT * FROM guild_settings WHERE guild_id = ?'
-  ).all()
+  ).bind(guildId).all()
 
   const settingsObj: Record<string, string> = {}
+  const updatedObj: Record<string, string> = {}
   for (const setting of settings.results) {
     settingsObj[setting.setting_key as string] = setting.setting_value as string
+    updatedObj[setting.setting_key as string] = setting.updated_at as string
   }
 
-  return c.json({ settings: settingsObj })
+  return c.json({ settings: settingsObj, updated_at: updatedObj })
 })
 
 // PUT /guilds/:guildId/settings
@@ -91,9 +93,9 @@ guilds.put('/:guildId/settings', async (c) => {
   // Update each setting
   for (const [key, value] of Object.entries(settings)) {
     await c.env.DB.prepare(
-      `INSERT INTO guild_settings (guild_id, setting_key, setting_value)
-       VALUES (?, ?, ?)
-       ON CONFLICT(guild_id, setting_key) DO UPDATE SET setting_value = ?`
+      `INSERT INTO guild_settings (guild_id, setting_key, setting_value, updated_at)
+       VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(guild_id, setting_key) DO UPDATE SET setting_value = ?, updated_at = CURRENT_TIMESTAMP`
     ).bind(guildId, key, value, value).run()
   }
 
@@ -106,7 +108,7 @@ guilds.get('/:guildId/modules', async (c) => {
 
   const modules = await c.env.DB.prepare(
     'SELECT * FROM guild_modules WHERE guild_id = ?'
-  ).all()
+  ).bind(guildId).all()
 
   return c.json({ modules: modules.results })
 })

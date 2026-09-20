@@ -133,6 +133,12 @@ async def create_bonus_report(discord_id: str, guild_id: str):
         "SELECT report_id FROM bonus_reports WHERE guild_id = ? AND discord_id = ? ORDER BY report_id DESC LIMIT 1",
         (guild_id, discord_id)
     )
+    try:
+        from services.api_sync import queue_bonus_sync
+        queue_bonus_sync(str(guild_id), rep["report_id"], str(discord_id),
+                         amount=float(calc.get("total", 0)), status="NEW")
+    except Exception as e:
+        print(f"[api_sync] warn: {e}")
     return {"ok": True, "report_id": rep["report_id"], "calc": calc}
 
 
@@ -236,6 +242,12 @@ async def create_bonus_report_for_week(discord_id: str, guild_id: str, week_star
                 """,
                 (total, json.dumps(calc["items"], ensure_ascii=False), rid),
             )
+            try:
+                from services.api_sync import queue_bonus_sync
+                queue_bonus_sync(str(guild_id), rid, str(discord_id),
+                                 amount=float(total), status="NEW")
+            except Exception as e:
+                print(f"[api_sync] warn: {e}")
             return {"ok": True, "report_id": rid, "calc": calc, "reopened": True}
 
         if st in ("DRAFT", "NEW"):
@@ -249,6 +261,12 @@ async def create_bonus_report_for_week(discord_id: str, guild_id: str, week_star
                 """,
                 (total, json.dumps(calc["items"], ensure_ascii=False), rid),
             )
+            try:
+                from services.api_sync import queue_bonus_sync
+                queue_bonus_sync(str(guild_id), rid, str(discord_id),
+                                 amount=float(total), status="NEW")
+            except Exception as e:
+                print(f"[api_sync] warn: {e}")
             return {"ok": True, "report_id": rid, "calc": calc, "updated": True, "status": st}
 
         return {"ok": False, "reason": "already_exists", "report_id": rid, "status": st}
@@ -280,6 +298,12 @@ async def create_bonus_report_for_week(discord_id: str, guild_id: str, week_star
         """,
         (guild_id, discord_id, week_start, week_end),
     )
+    try:
+        from services.api_sync import queue_bonus_sync
+        queue_bonus_sync(str(guild_id), rep["report_id"], str(discord_id),
+                         amount=float(total), status="DRAFT")
+    except Exception as e:
+        print(f"[api_sync] warn: {e}")
     return {"ok": True, "report_id": rep["report_id"], "calc": calc, "reopened": False, "status": "DRAFT"}
 
 

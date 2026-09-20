@@ -787,6 +787,12 @@ async def create_promo_report_and_post(
         (str(discord_id),),
     )
     report_id = int(rep["report_id"])
+    try:
+        from services.api_sync import queue_promo_sync
+        queue_promo_sync(str(interaction.guild.id), report_id, str(discord_id),
+                         from_rank=from_rank_id, to_rank=to_rank_id, status="NEW")
+    except Exception as e:
+        print(f"[api_sync] warn: {e}")
 
     # 2) куда постить
     raw = await get_setting("promo_channel_id")
@@ -3724,6 +3730,13 @@ async def approve_promotion(interaction: discord.Interaction, report_id: int):
             decision='APPROVED'
         WHERE report_id=?
     """, (admin_id, int(report_id)))
+    try:
+        from services.api_sync import queue_promo_sync
+        queue_promo_sync(str(guild.id), int(report_id), str(r["discord_id"]),
+                         from_rank=r.get("from_rank_id"), to_rank=r.get("to_rank_id"),
+                         status="APPROVED")
+    except Exception as e:
+        print(f"[api_sync] warn: {e}")
 
     # 2) current_rank_id пользователю
     await execute(
@@ -3829,6 +3842,13 @@ async def reject_promotion(interaction: discord.Interaction, report_id: int, rea
         """,
         (admin_id, reason_text, int(report_id)),
     )
+    try:
+        from services.api_sync import queue_promo_sync
+        queue_promo_sync(str(interaction.guild.id), int(report_id), str(r["discord_id"]),
+                         from_rank=r.get("from_rank_id"), to_rank=r.get("to_rank_id"),
+                         status="REJECTED", reason=reason_text)
+    except Exception as e:
+        print(f"[api_sync] warn: {e}")
 
     # обновляем исходное сообщение в промо-канале (убираем кнопки + reason)
     await update_promo_report_message(interaction.client, int(report_id))
@@ -4243,6 +4263,12 @@ async def approve_bonus(interaction: discord.Interaction, report_id: int):
         """,
         (admin_id, float(total), report_id)
     )
+    try:
+        from services.api_sync import queue_bonus_sync
+        queue_bonus_sync(str(interaction.guild.id), int(report_id), str(r["discord_id"]),
+                         amount=float(total), status="APPROVED")
+    except Exception as e:
+        print(f"[api_sync] warn: {e}")
 
     await update_bonus_audit_message(interaction.client, report_id)
 
@@ -4340,6 +4366,13 @@ class RejectBonusModal(discord.ui.Modal, title="Отклонение преми�
 
         sea = float(r.get("sea_amount") or 0.0)
         total = live_base_total + sea
+
+        try:
+            from services.api_sync import queue_bonus_sync
+            queue_bonus_sync(str(interaction.guild.id), int(self.report_id), str(r["discord_id"]),
+                             amount=float(total), status="REJECTED", reason=reason_text)
+        except Exception as e:
+            print(f"[api_sync] warn: {e}")
 
         log = discord.Embed(title="❌ Премия отклонена", color=0xE74C3C)
         log.add_field(name="Премия отчет", value=str(self.report_id), inline=True)
