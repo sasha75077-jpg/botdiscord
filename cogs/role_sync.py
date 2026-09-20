@@ -12,6 +12,8 @@ class RoleSync(commands.Cog):
     async def cog_load(self):
         if not self.reconcile_loop.is_running():
             self.reconcile_loop.start()
+        if not self.contracts_poll_loop.is_running():
+            self.contracts_poll_loop.start()
 
     @tasks.loop(minutes=10)
     async def reconcile_loop(self):
@@ -27,6 +29,17 @@ class RoleSync(commands.Cog):
 
     @reconcile_loop.before_loop
     async def _before_reconcile(self):
+        await self.bot.wait_until_ready()
+
+    @tasks.loop(seconds=60)
+    async def contracts_poll_loop(self):
+        try:
+            await rs.poll_site_contracts()
+        except Exception as e:
+            print(f"[contracts-poll] warn: {e}")
+
+    @contracts_poll_loop.before_loop
+    async def _before_contracts_poll(self):
         await self.bot.wait_until_ready()
 
     @commands.Cog.listener()

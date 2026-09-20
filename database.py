@@ -75,6 +75,12 @@ async def migrate_db():
         except Exception:
             pass  # колонка уже есть
 
+        # site_id для контрактов с сайта
+        try:
+            await db.execute("ALTER TABLE contracts ADD COLUMN site_id INTEGER")
+        except Exception:
+            pass  # колонка уже есть
+
         # answers (JSON ответов) для заявок с сайта/модалки
         try:
             await db.execute("ALTER TABLE applications ADD COLUMN answers TEXT")

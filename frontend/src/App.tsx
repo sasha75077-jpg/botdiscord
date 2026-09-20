@@ -16,6 +16,8 @@ import NewContractPage from '@/pages/contracts/NewContractPage';
 import NewApplicationPage from '@/pages/applications/NewApplicationPage';
 import ApplicationsPage from '@/pages/applications/ApplicationsPage';
 import ApplicationDetailPage from '@/pages/applications/ApplicationDetailPage';
+import ContractsPage from '@/pages/contracts/ContractsPage';
+import ContractDetailPage from '@/pages/contracts/ContractDetailPage';
 
 // Layouts
 import OwnerLayout from '@/layouts/OwnerLayout';
@@ -73,8 +75,9 @@ function App() {
           <Route path="/guilds/:guildId/sheets" element={<GoogleSheetsSettingsPage />} />
           <Route path="/guilds/:guildId/roles" element={<RolesPage />} />
           <Route path="/roles" element={<RolesPage />} />
-          <Route path="/contracts" element={<div>Contracts</div>} />
+          <Route path="/contracts" element={<ContractsPage />} />
           <Route path="/contracts/new" element={<NewContractPage />} />
+          <Route path="/contracts/:id" element={<ContractDetailPage />} />
           <Route path="/applications" element={<ApplicationsPage />} />
           <Route path="/applications/new" element={<NewApplicationPage />} />
           <Route path="/applications/:id" element={<ApplicationDetailPage />} />
@@ -93,8 +96,9 @@ function App() {
       <UserLayout>
         <Routes>
           <Route path="/" element={<UserDashboard />} />
-          <Route path="/contracts" element={<div>My Contracts (Recruiter)</div>} />
+          <Route path="/contracts" element={<ContractsPage />} />
           <Route path="/contracts/new" element={<NewContractPage />} />
+          <Route path="/contracts/:id" element={<ContractDetailPage />} />
           <Route path="/applications" element={<ApplicationsPage />} />
           <Route path="/applications/new" element={<NewApplicationPage />} />
           <Route path="/applications/:id" element={<ApplicationDetailPage />} />
@@ -110,8 +114,9 @@ function App() {
     <UserLayout>
       <Routes>
         <Route path="/" element={<UserDashboard />} />
-        <Route path="/contracts" element={<div>My Contracts</div>} />
+        <Route path="/contracts" element={<ContractsPage />} />
         <Route path="/contracts/new" element={<NewContractPage />} />
+        <Route path="/contracts/:id" element={<ContractDetailPage />} />
         <Route path="/applications" element={<ApplicationsPage />} />
         <Route path="/applications/new" element={<NewApplicationPage />} />
         <Route path="/applications/:id" element={<ApplicationDetailPage />} />

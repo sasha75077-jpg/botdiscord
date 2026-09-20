@@ -93,6 +93,8 @@ export const guildsApi = {
 
 // Contracts API
 export const contractsApi = {
+  create: (guildId: string, data: { contract_type: string; price?: number; nickname?: string; details?: Record<string, any> }) =>
+    api.post(`/guilds/${guildId}/contracts/`, data),
   list: (guildId: string, params?: any) =>
     api.get(`/guilds/${guildId}/contracts/`, { params }),
   get: (guildId: string, contractId: number) =>

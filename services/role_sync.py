@@ -12,11 +12,12 @@
 import asyncio
 import json
 import os
+import urllib.parse
 import urllib.request
 
 import discord
 
-from database import execute, fetch_all, fetch_one, get_setting
+from database import execute, fetch_all, fetch_one, get_setting, set_setting
 
 API_URL = os.getenv("PANEL_API_URL", "https://melancholia-api.sasha75077.workers.dev").rstrip("/")
 SYNC_SECRET = os.getenv("PANEL_SYNC_SECRET", "")
@@ -86,12 +87,7 @@ async def bot_log(bot, guild_id, message, level="error", source="role-sync"):
 
 
 async def pull_remote_state(guild_id):
-    """Подтянуть настройки/модули с сайта в локальную БД.
-
-    Настройки: побеждает более свежий updated_at (UTC с обеих сторон).
-    Модули: сайт - единственный писатель, применяется как есть.
-    Возвращает кол-во примененных изменений.
-    """
+    """Подтянуть настройки/модули с сайта в локальную БД."""
     applied = 0
     try:
         data = await asyncio.to_thread(_api_get, f"/guilds/{guild_id}/settings")
@@ -260,7 +256,6 @@ async def reconcile_member(bot, guild, member):
 
 
 async def reconcile_guild(bot, guild):
-    """Полная сверка сервера."""
     mapping = await get_mapping(str(guild.id))
     if not mapping["admin_ids"] and not mapping["recruit_ids"]:
         return 0
@@ -279,3 +274,83 @@ async def reconcile_guild(bot, guild):
     if changed:
         print(f"[role-sync] {guild.name}: {changed} изменений")
     return changed
+
+
+SITE_TO_LOCAL_STATUS = {"pending": "PENDING", "approved": "APPROVED", "rejected": "REJECTED"}
+
+
+async def poll_site_contracts():
+    """Забрать контракты с сайта в локальную БД (новые + решения).
+
+    Зеркалит только статус confirm_status (без пересчета промо-кредитов).
+    """
+    if not SYNC_SECRET:
+        return
+    try:
+        guilds = await fetch_all("SELECT guild_id FROM guilds WHERE is_active = 1")
+    except Exception as e:
+        print(f"[contracts-poll] warn guilds: {e}")
+        return
+    for g in guilds:
+        gid = str(g["guild_id"])
+        try:
+            await _poll_guild_contracts(gid)
+        except Exception as e:
+            print(f"[contracts-poll] warn {gid}: {e}")
+
+
+async def _poll_guild_contracts(guild_id: str):
+    cursor = await get_setting("contracts_poll_cursor", guild_id) or "1970-01-01 00:00:00"
+    try:
+        data = await asyncio.to_thread(
+            _api_get, f"/guilds/{guild_id}/contracts/?limit=500&since={urllib.parse.quote(cursor)}")
+    except Exception as e:
+        print(f"[contracts-poll] warn api: {e}")
+        return
+    rows = data if isinstance(data, list) else []
+    newest = cursor
+    for r in rows:
+        try:
+            ts = str(r.get("updated_at") or r.get("created_at") or "")
+            if ts > newest:
+                newest = ts
+            await _mirror_site_contract(guild_id, r)
+        except Exception as e:
+            print(f"[contracts-poll] warn row: {e}")
+    if newest != cursor:
+        await set_setting("contracts_poll_cursor", newest, guild_id)
+
+
+async def _mirror_site_contract(guild_id: str, r: dict):
+    site_id = r.get("id")
+    if not site_id:
+        return
+    local = await fetch_one("SELECT * FROM contracts WHERE site_id = ?", (site_id,))
+    want = SITE_TO_LOCAL_STATUS.get(str(r.get("status") or "pending"), "PENDING")
+    if not local:
+        if str(r.get("status") or "pending") != "pending":
+            return  # старые решения без локальной строки не трогаем
+        details = r.get("details")
+        await execute(
+            """INSERT INTO contracts
+               (guild_id, ts, discord_id, contract_type, price, details, confirm_status, source_status, site_id)
+               VALUES (?, ?, ?, ?, ?, ?, 'PENDING', 'SITE', ?)""",
+            (guild_id, r.get("created_at"), str(r.get("discord_id")),
+             str(r.get("contract_type")),
+             float(r.get("price") or 0),
+             json.dumps(details, ensure_ascii=False) if details else None,
+             site_id),
+        )
+        try:
+            await execute(
+                "INSERT OR IGNORE INTO users (discord_id, guild_id) VALUES (?, ?)",
+                (str(r.get("discord_id")), guild_id),
+            )
+        except Exception:
+            pass
+        return
+    if (local.get("confirm_status") or "PENDING") == "PENDING" and want != "PENDING":
+        await execute(
+            "UPDATE contracts SET confirm_status = ? WHERE id = ?",
+            (want, local["id"]),
+        )
