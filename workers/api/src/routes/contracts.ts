@@ -160,7 +160,12 @@ contracts.post('/:guildId/contracts/', async (c) => {
       return c.json({ error: 'Не настроен канал загрузки скринов (админ: Уведомления)' }, 400)
     }
     const fd = new FormData()
-    fd.append('content', `Контракт ${contractType} от <@${who.discord_id}> (сайт)`)
+    const pingRow = await c.env.DB.prepare(
+      "SELECT setting_value FROM guild_settings WHERE guild_id = ? AND setting_key = 'contracts_ping_role_ids'"
+    ).bind(guildId).first<{ setting_value: string }>()
+    const pingIds = (pingRow?.setting_value || '').split(',').map((s) => s.trim()).filter(Boolean)
+    const pings = pingIds.map((id) => `<@&${id}>`).join(' ')
+    fd.append('content', `${pings ? pings + '\n' : ''}Контракт ${contractType} от <@${who.discord_id}> (сайт)`)
     files.forEach((f, i) => fd.append(`files[${i}]`, f, f.name))
     const up = await fetch(`${c.env.DISCORD_API_ENDPOINT}/channels/${channelId}/messages`, {
       method: 'POST',
@@ -170,8 +175,9 @@ contracts.post('/:guildId/contracts/', async (c) => {
     if (!up.ok) {
       return c.json({ error: 'Не смог загрузить скрины в Discord' }, 502)
     }
-    const msg = await up.json<{ attachments: Array<{ url: string }> }>()
+    const msg = await up.json<{ id: string; attachments: Array<{ url: string }> }>()
     for (const a of msg.attachments || []) attachments.push(a.url)
+    details.upload = { channel_id: channelId, message_id: msg.id }
   }
 
   const res = await c.env.DB.prepare(

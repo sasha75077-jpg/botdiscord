@@ -18,6 +18,7 @@ export default function NotificationsPage() {
   const [logChannel, setLogChannel] = useState('');
   const [pricesChannel, setPricesChannel] = useState('');
   const [uploadChannel, setUploadChannel] = useState('');
+  const [appsChannel, setAppsChannel] = useState('');
   const [pingIds, setPingIds] = useState<string[]>([]);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -42,6 +43,7 @@ export default function NotificationsPage() {
     setLogChannel(s.contracts_log_channel_id || '');
     setPricesChannel(s.prices_panel_channel_id || '');
     setUploadChannel(s.contracts_upload_channel_id || '');
+    setAppsChannel(s.applications_log_channel_id || '');
     setPingIds(String(s.contracts_ping_role_ids || '').split(',').map((x: string) => x.trim()).filter(Boolean));
   }, [settings]);
 
@@ -51,6 +53,7 @@ export default function NotificationsPage() {
         contracts_log_channel_id: logChannel,
         prices_panel_channel_id: pricesChannel,
         contracts_upload_channel_id: uploadChannel,
+        applications_log_channel_id: appsChannel,
         contracts_ping_role_ids: pingIds.join(','),
       }),
     onSuccess: () => {
@@ -85,12 +88,13 @@ export default function NotificationsPage() {
       )}
 
       <div className="card">
-        <h2 className="text-xl font-bold mb-1">Лог контрактов</h2>
+        <h2 className="text-xl font-bold mb-1">Канал контрактов</h2>
         <p className="text-sm text-gray-500 mb-3">
-          Сюда бот пишет новые контракты с сайта и смену статусов.
+          Сюда уходят контракты с сайта вместе со скринами — это сообщение и есть лог.
+          Сюда же бот пишет смену статусов и напоминания взявшим.
         </p>
         <label className="block text-sm font-medium mb-2">Канал</label>
-        <select value={logChannel} onChange={(e) => setLogChannel(e.target.value)} className="input w-full max-w-md">
+        <select value={uploadChannel} onChange={(e) => setUploadChannel(e.target.value)} className="input w-full max-w-md">
           <option value="">— не выбран —</option>
           {channels.map((ch: any) => (
             <option key={ch.id} value={ch.id}># {ch.name}</option>
@@ -113,13 +117,13 @@ export default function NotificationsPage() {
       </div>
 
       <div className="card">
-        <h2 className="text-xl font-bold mb-1">Канал загрузки скринов</h2>
+        <h2 className="text-xl font-bold mb-1">Канал заявок</h2>
         <p className="text-sm text-gray-500 mb-3">
-          Сюда сайт заливает скриншоты контрактов (иначе забьет базу). Если пуст — используется лог-канал.
+          Сюда бот постит панельки заявок с сайта и из Discord.
         </p>
         <label className="block text-sm font-medium mb-2">Канал</label>
-        <select value={uploadChannel} onChange={(e) => setUploadChannel(e.target.value)} className="input w-full max-w-md">
-          <option value="">— как лог-канал —</option>
+        <select value={appsChannel} onChange={(e) => setAppsChannel(e.target.value)} className="input w-full max-w-md">
+          <option value="">— не выбран —</option>
           {channels.map((ch: any) => (
             <option key={ch.id} value={ch.id}># {ch.name}</option>
           ))}

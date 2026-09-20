@@ -356,12 +356,24 @@ async def nudge_site_contracts(bot):
             guild = bot.get_guild(int(r["guild_id"]))
             if guild is None:
                 continue
-            cfg = await fetch_all(
-                "SELECT setting_key, setting_value FROM guild_settings WHERE guild_id = ? AND setting_key = 'contracts_log_channel_id'",
-                (str(r["guild_id"]),),
-            )
-            ch_id = (cfg[0]["setting_value"] if cfg else "") or ""
-            if not ch_id.strip().isdigit():
+            ch_id = None
+            try:
+                det = r.get("details")
+                if isinstance(det, str):
+                    det = json.loads(det)
+                ch_id = ((det or {}).get("upload") or {}).get("channel_id")
+            except Exception:
+                ch_id = None
+            if not ch_id:
+                cfg = await fetch_all(
+                    "SELECT setting_value FROM guild_settings WHERE guild_id = ? AND setting_key IN ('contracts_upload_channel_id', 'contracts_log_channel_id')",
+                    (str(r["guild_id"]),),
+                )
+                for row in cfg:
+                    if (row["setting_value"] or "").strip().isdigit():
+                        ch_id = row["setting_value"].strip()
+                        break
+            if not ch_id:
                 continue
             channel = guild.get_channel(int(ch_id))
             if channel is None:
@@ -473,24 +485,23 @@ async def _mirror_site_contract(bot, guild_id: str, r: dict):
             "UPDATE contracts SET confirm_status = ? WHERE id = ?",
             (want, local["id"]),
         )
-        await _post_contract_log(bot, guild_id, {**r, "_decision": want})
+        await _reply_contract_decision(bot, guild_id, r, want)
 
 
-async def _post_contract_log(bot, guild_id: str, r: dict):
-    """Лог новых контрактов и решений в настроенный канал + пинги."""
+async def _reply_contract_decision(bot, guild_id: str, r: dict, decision: str):
+    """Решение по контракту с сайта - ответом в то же сообщение подачи."""
     if bot is None:
         return
     try:
+        details = r.get("details")
+        if isinstance(details, str):
+            details = json.loads(details)
+        upload = (details or {}).get("upload") or {}
+        ch_id, msg_id = upload.get("channel_id"), upload.get("message_id")
+        if not ch_id or not msg_id:
+            return
         guild = bot.get_guild(int(guild_id))
         if guild is None:
-            return
-        rows = await fetch_all(
-            "SELECT setting_key, setting_value FROM guild_settings WHERE guild_id = ? AND setting_key IN ('contracts_log_channel_id', 'contracts_ping_role_ids')",
-            (guild_id,),
-        )
-        cfg = {x["setting_key"]: x["setting_value"] for x in rows}
-        ch_id = (cfg.get("contracts_log_channel_id") or "").strip()
-        if not ch_id or not ch_id.isdigit():
             return
         channel = guild.get_channel(int(ch_id))
         if channel is None:
@@ -498,23 +509,11 @@ async def _post_contract_log(bot, guild_id: str, r: dict):
                 channel = await guild.fetch_channel(int(ch_id))
             except Exception:
                 return
-        ping_ids = [x.strip() for x in (cfg.get("contracts_ping_role_ids") or "").split(",") if x.strip().isdigit()]
-        pings = " ".join(f"<@&{pid}" + ">" for pid in ping_ids)
-        decision = r.get("_decision")
-        if decision:
-            title = "✅ Контракт принят" if decision == "APPROVED" else "❌ Контракт отклонен"
-            color = 0x2ECC71 if decision == "APPROVED" else 0xE74C3C
-        else:
-            title = "📝 Новый контракт с сайта"
-            color = 0x3498DB
-        embed = discord.Embed(title=title, color=color)
-        embed.add_field(name="ID", value=str(r.get("id")), inline=True)
-        embed.add_field(name="Тип", value=str(r.get("contract_type")), inline=True)
-        if r.get("price"):
-            embed.add_field(name="Сумма", value=str(r.get("price")), inline=True)
-        embed.add_field(name="От", value=f"<@{r.get('discord_id')}>", inline=False)
-        embed.add_field(name="Сайт", value=f"https://botdiscord-87a.pages.dev/contracts/{r.get('id')}", inline=False)
-        content = pings if pings and not decision else None
-        await channel.send(content=content, embed=embed)
+        try:
+            msg = await channel.fetch_message(int(msg_id))
+        except Exception:
+            return
+        mark = "✅ Принят" if decision == "APPROVED" else "❌ Отклонен"
+        await msg.reply(f"{mark} (решение с сайта)")
     except Exception as e:
         print(f"[contracts-log] warn: {e}")
