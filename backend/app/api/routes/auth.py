@@ -5,6 +5,7 @@ from ...core.config import settings
 from ...core.security import verify_password, get_password_hash, create_access_token, create_refresh_token, verify_token
 from ...core.database import get_db, Database
 from ...schemas import OwnerLogin, TokenResponse, DiscordAuthCallback, TokenRefresh
+from ..dependencies import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -98,18 +99,15 @@ async def discord_oauth_url(guild_id: str = None):
 
     return {"oauth_url": oauth_url}
 
-@router.get("/discord/callback", response_model=TokenResponse)
+@router.post("/discord/callback", response_model=TokenResponse)
 async def discord_oauth_callback(
-    code: str,
-    state: str = "none",
+    body: DiscordAuthCallback,
     db: Database = Depends(get_db)
 ):
     """Discord OAuth2 callback"""
 
-    # Парсить guild_id из state
-    guild_id = None
-    if state and state.startswith("guild:") and state != "guild:none":
-        guild_id = state.split(":", 1)[1]
+    code = body.code
+    guild_id = body.guild_id
 
     # Обменять code на access_token
     async with httpx.AsyncClient() as client:
@@ -274,9 +272,7 @@ async def refresh_access_token(
 
 @router.get("/me")
 async def get_current_user_info(
-    current_user: dict = Depends(lambda: None)  # Заполним позже
+    current_user: dict = Depends(get_current_user)
 ):
     """Получить информацию о текущем пользователе"""
-    from ..dependencies import get_current_user
-    user = await get_current_user()
-    return user
+    return current_user

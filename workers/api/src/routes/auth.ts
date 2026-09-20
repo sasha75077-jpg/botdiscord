@@ -46,7 +46,7 @@ auth.get('/discord/url', async (c) => {
 
   const params = new URLSearchParams({
     client_id: c.env.DISCORD_CLIENT_ID,
-    redirect_uri: `${c.env.FRONTEND_URL}/auth/callback`,
+    redirect_uri: `${c.env.FRONTEND_URL}/auth/callback`, // Discord redirects to frontend
     response_type: 'code',
     scope: 'identify guilds email',
     state,
@@ -56,10 +56,9 @@ auth.get('/discord/url', async (c) => {
   return c.json({ url })
 })
 
-// GET /auth/discord/callback
-auth.get('/discord/callback', async (c) => {
-  const code = c.req.query('code')
-  const state = c.req.query('state') || 'none'
+// POST /auth/discord/callback
+auth.post('/discord/callback', async (c) => {
+  const { code, guild_id } = await c.req.json<{ code: string; guild_id?: string }>()
 
   if (!code) {
     return c.json({ error: 'Missing code' }, 400)
@@ -108,21 +107,15 @@ auth.get('/discord/callback', async (c) => {
 
     const userGuilds = await guildsResponse.json<Array<{ id: string }>>()
 
-    // Parse guild_id from state
-    let guildId: string | null = null
-    if (state && state.startsWith('guild:') && state !== 'guild:none') {
-      guildId = state.split(':', 2)[1]
-    }
-
     let targetGuildId: string
 
-    if (guildId) {
+    if (guild_id) {
       // Check user is in this guild
       const userGuildIds = userGuilds.map(g => g.id)
-      if (!userGuildIds.includes(guildId)) {
+      if (!userGuildIds.includes(guild_id)) {
         return c.json({ error: 'You are not a member of this guild' }, 403)
       }
-      targetGuildId = guildId
+      targetGuildId = guild_id
     } else {
       // Find first registered guild
       const registeredGuilds = await c.env.DB.prepare(
