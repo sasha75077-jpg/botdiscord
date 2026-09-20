@@ -16,6 +16,8 @@ class RoleSync(commands.Cog):
             self.contracts_poll_loop.start()
         if not self.contracts_nudge_loop.is_running():
             self.contracts_nudge_loop.start()
+        if not self.prices_loop.is_running():
+            self.prices_loop.start()
 
     @tasks.loop(minutes=10)
     async def reconcile_loop(self):
@@ -53,6 +55,25 @@ class RoleSync(commands.Cog):
 
     @contracts_nudge_loop.before_loop
     async def _before_contracts_nudge(self):
+        await self.bot.wait_until_ready()
+
+    @tasks.loop(minutes=5)
+    async def prices_loop(self):
+        try:
+            from services.prices_sync import pull_prices
+            from services.prices_panel import ensure_panel
+            from cogs.admin_panel import build_prices_embed
+            await pull_prices()
+            for guild in list(self.bot.guilds):
+                try:
+                    await ensure_panel(self.bot, guild, build_prices_embed)
+                except Exception as e:
+                    print(f"[prices-panel] warn {guild.id}: {e}")
+        except Exception as e:
+            print(f"[prices] warn loop: {e}")
+
+    @prices_loop.before_loop
+    async def _before_prices(self):
         await self.bot.wait_until_ready()
 
     @commands.Cog.listener()

@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/authStore';
-import { contractsApi } from '@/lib/api';
+import { contractsApi, pricesApi } from '@/lib/api';
 import { AlertCircle, CheckCircle } from 'lucide-react';
 
 interface ContractFormProps {
@@ -39,6 +40,45 @@ export default function ContractForm({ guildId, onSuccess, restrictedToAgitation
   const [totalUniforms, setTotalUniforms] = useState('');
   const [links, setLinks] = useState(['']);
   const [wnCategory, setWnCategory] = useState('Зеленка(чат)');
+
+  const { data: pricesData } = useQuery({
+    queryKey: ['prices'],
+    queryFn: async () => (await pricesApi.list()).data,
+  });
+  const priceMap: Record<string, number> = {};
+  for (const p of (pricesData?.prices || []) as Array<{ item_key: string; price: number }>) {
+    priceMap[p.item_key] = Number(p.price ?? 0);
+  }
+  const fmt = (n: number) => n.toLocaleString('ru-RU');
+
+  const payoutHint = (): string | null => {
+    switch (contractType) {
+      case 'активация': {
+        const n = Number(price);
+        return n > 0 ? `Выплата: ${fmt(n)}` : null;
+      }
+      case 'тюнинг':
+        return `Выплата: ${fmt(priceMap['tuning:with_screenshot'] || 0)}`;
+      case 'ателье':
+        return `Выплата за форму: ${fmt(priceMap['atelier:uniform'] ?? priceMap['atelier.uniform'] ?? 0)}`;
+      case 'агитации-маркетплейс':
+        return `Выплата за ссылку: ${fmt(priceMap['agit:marketplace_link'] || 0)}`;
+      case 'агитации-wn':
+        return `Выплата: зеленка ${fmt(priceMap['agit:wn_green'] || 0)} / обзвон ${fmt(priceMap['agit:wn_notice'] || 0)}`;
+      case 'металлургия-сдача': {
+        const key: string | undefined = {
+          'Железная руда': 'ore.delivery.iron', 'Серебряная руда': 'ore.delivery.silver',
+          'Медная руда': 'ore.delivery.copper', 'Оловянная руда': 'ore.delivery.tin',
+          'Золотая руда': 'ore.delivery.gold',
+        }[oreType];
+        return key ? `Выплата: ${fmt(priceMap[key] || 0)}` : null;
+      }
+      case 'товары':
+        return `Доставка ${fmt(priceMap['goods.delivery'] ?? priceMap['goods:delivery'] ?? 0)} / погрузка ${fmt(priceMap['goods.loading'] ?? priceMap['goods:loading'] ?? 0)}`;
+      default:
+        return null;
+    }
+  };
 
   const availableTypes = restrictedToAgitation
     ? CONTRACT_TYPES.filter(t => t.recruiterOnly)
@@ -237,6 +277,11 @@ export default function ContractForm({ guildId, onSuccess, restrictedToAgitation
       <p className="text-sm text-gray-500">
         Скриншоты прикладывай в Discord-канале контрактов — на сайте пока только данные.
       </p>
+      {payoutHint() && (
+        <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+          <p className="text-green-800 dark:text-green-200 font-semibold">💰 {payoutHint()}</p>
+        </div>
+      )}
 
       <button type="submit" disabled={loading} className="btn btn-primary w-full">
         {loading ? 'Отправка...' : 'Отправить контракт'}

@@ -2155,32 +2155,27 @@ class AdminPanel(commands.Cog):
     @app_commands.guilds(discord.Object(id=GUILD_ID))
     @admin_roles_check(get_setting)
     async def post_prices(self, interaction: discord.Interaction):
-        embed = await build_prices_embed()
-        msg = await interaction.channel.send(embed=embed)
-    
-        await execute("INSERT OR REPLACE INTO settings(key, value) VALUES(?,?)", ("prices_channel_id", str(msg.channel.id)))
-        await execute("INSERT OR REPLACE INTO settings(key, value) VALUES(?,?)", ("prices_message_id", str(msg.id)))
-    
-        await interaction.response.send_message("✅ Прайс опубликован. Используй /refresh_prices для обновления.", ephemeral=True)
+        from services.prices_panel import ensure_panel, CH_KEY
+        from database import set_setting as db_set_setting
+        guild = interaction.guild
+        if guild is None:
+            return await interaction.response.send_message("❌ Только на сервере.", ephemeral=True)
+        await db_set_setting(CH_KEY, str(interaction.channel.id), str(guild.id))
+        status = await ensure_panel(interaction.client, guild, build_prices_embed)
+        await interaction.response.send_message(
+            f"✅ Панель: {status}. Дальше обновляется сама.", ephemeral=True)
     
 
     @app_commands.command(name="refresh_prices", description="Обновить ранее опубликованный прайс-эмбед")
     @app_commands.guilds(discord.Object(id=GUILD_ID))
     @admin_roles_check(get_setting)
     async def refresh_prices(self, interaction: discord.Interaction):
-        ch_id = await get_setting("prices_channel_id")
-        msg_id = await get_setting("prices_message_id")
-    
-        if not ch_id or not msg_id:
-            return await interaction.response.send_message("❌ Сначала сделай /post_prices.", ephemeral=True)
-    
-        channel = interaction.client.get_channel(int(ch_id)) or await interaction.client.fetch_channel(int(ch_id))
-        msg = await channel.fetch_message(int(msg_id))
-    
-        embed = await build_prices_embed()
-        await msg.edit(embed=embed)
-    
-        await interaction.response.send_message("✅ Прайс обновлён.", ephemeral=True)
+        from services.prices_panel import ensure_panel
+        guild = interaction.guild
+        if guild is None:
+            return await interaction.response.send_message("❌ Только на сервере.", ephemeral=True)
+        status = await ensure_panel(interaction.client, guild, build_prices_embed)
+        await interaction.response.send_message(f"✅ Панель: {status}.", ephemeral=True)
 
 
     @app_commands.command(name="set_price", description="Установить цену: item_key -> price")

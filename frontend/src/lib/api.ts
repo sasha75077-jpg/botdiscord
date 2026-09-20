@@ -169,4 +169,10 @@ export const showcaseApi = {
   remove: (id: number) => api.delete(`/showcase/${id}`),
 };
 
+// Prices API
+export const pricesApi = {
+  list: () => api.get('/prices'),
+  save: (items: Record<string, number>) => api.put('/prices', { items }),
+};
+
 export default api;

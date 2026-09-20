@@ -10,6 +10,7 @@ import {
   LogOut,
   Menu,
   X,
+  Banknote,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -26,6 +27,7 @@ export default function UserLayout({ children }: Props) {
     { name: 'Дашборд', href: '/', icon: LayoutDashboard },
     { name: 'Мои контракты', href: '/contracts', icon: FileText },
     { name: 'Заявки', href: '/applications', icon: ClipboardList },
+    { name: 'Выплаты', href: '/prices', icon: Banknote },
     { name: 'Мои отчеты', href: '/reports', icon: ClipboardList },
     { name: 'Профиль', href: '/profile', icon: User },
   ];

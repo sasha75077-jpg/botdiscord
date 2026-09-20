@@ -19,6 +19,7 @@ import ApplicationDetailPage from '@/pages/applications/ApplicationDetailPage';
 import ContractsPage from '@/pages/contracts/ContractsPage';
 import ContractDetailPage from '@/pages/contracts/ContractDetailPage';
 import NotificationsPage from '@/pages/admin/NotificationsPage';
+import PricesPage from '@/pages/PricesPage';
 
 // Layouts
 import OwnerLayout from '@/layouts/OwnerLayout';
@@ -57,6 +58,7 @@ function App() {
           <Route path="/" element={<OwnerDashboard />} />
           <Route path="/owner/settings" element={<OwnerSettingsPage />} />
           <Route path="/owner/showcase" element={<ShowcaseManagePage />} />
+          <Route path="/prices" element={<PricesPage />} />
           <Route path="/guilds/:guildId/roles" element={<RolesPage />} />
           <Route path="/guilds" element={<div>Guilds Management</div>} />
           <Route path="/guilds/:guildId" element={<div>Guild Details</div>} />
@@ -85,6 +87,7 @@ function App() {
           <Route path="/reports" element={<div>Reports</div>} />
           <Route path="/users" element={<div>Users</div>} />
           <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/prices" element={<PricesPage />} />
           <Route path="/settings" element={<div>Settings</div>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
@@ -104,6 +107,7 @@ function App() {
           <Route path="/applications" element={<ApplicationsPage />} />
           <Route path="/applications/new" element={<NewApplicationPage />} />
           <Route path="/applications/:id" element={<ApplicationDetailPage />} />
+          <Route path="/prices" element={<PricesPage />} />
           <Route path="/profile" element={<div>My Profile</div>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
@@ -122,6 +126,7 @@ function App() {
         <Route path="/applications" element={<ApplicationsPage />} />
         <Route path="/applications/new" element={<NewApplicationPage />} />
         <Route path="/applications/:id" element={<ApplicationDetailPage />} />
+        <Route path="/prices" element={<PricesPage />} />
         <Route path="/reports" element={<div>My Reports</div>} />
         <Route path="/profile" element={<div>My Profile</div>} />
         <Route path="*" element={<Navigate to="/" replace />} />

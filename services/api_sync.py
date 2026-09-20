@@ -12,7 +12,7 @@ API_URL = os.getenv("PANEL_API_URL", "https://melancholia-api.sasha75077.workers
 SYNC_SECRET = os.getenv("PANEL_SYNC_SECRET", "")
 
 
-def _post(path: str, payload: dict):
+def _post(path: str, payload: dict, method: str = "POST"):
     try:
         if not SYNC_SECRET:
             return
@@ -23,7 +23,7 @@ def _post(path: str, payload: dict):
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {SYNC_SECRET}",
             },
-            method="POST",
+            method=method,
         )
         with urllib.request.urlopen(req, timeout=10) as r:
             r.read()
@@ -31,7 +31,7 @@ def _post(path: str, payload: dict):
         print(f"[api_sync] warn: {e}")
 
 
-def queue_sync(path: str, payload: dict):
+def queue_sync(path: str, payload: dict, method: str = "POST"):
     """Общая постановка синка в очередь (не блокирует бота)."""
     if not SYNC_SECRET or not payload:
         return
@@ -39,7 +39,7 @@ def queue_sync(path: str, payload: dict):
         loop = asyncio.get_running_loop()
     except RuntimeError:
         return
-    loop.create_task(asyncio.to_thread(_post, path, payload))
+    loop.create_task(asyncio.to_thread(_post, path, payload, method))
 
 
 def queue_contract_sync(guild_id, ts, discord_id, contract_type,
