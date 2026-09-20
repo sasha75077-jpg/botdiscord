@@ -30,6 +30,7 @@ export default function AdminLayout({ children }: Props) {
     { name: 'Отчеты', href: '/reports', icon: ClipboardList },
     { name: 'Пользователи', href: '/users', icon: Users },
     { name: 'Роли', href: '/roles', icon: Shield },
+    { name: 'Заявки', href: '/applications', icon: ClipboardList },
     { name: 'Настройки', href: '/settings', icon: Settings },
   ];
 

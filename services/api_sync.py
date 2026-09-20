@@ -57,7 +57,9 @@ def queue_contract_sync(guild_id, ts, discord_id, contract_type,
     })
 
 
-def queue_application_sync(guild_id, app_id, discord_id, status="PENDING", reason=None):
+def queue_application_sync(guild_id, app_id, discord_id, status="PENDING", reason=None,
+                           claimed_by=None, decided_by=None, thread_id=None,
+                           log_channel_id=None, log_message_id=None):
     """Синхронизация заявки (external_id = uuid бота)."""
     if not guild_id or not app_id or not discord_id:
         return
@@ -66,6 +68,11 @@ def queue_application_sync(guild_id, app_id, discord_id, status="PENDING", reaso
         "discord_id": str(discord_id),
         "status": status or "PENDING",
         "reason": reason,
+        "claimed_by": str(claimed_by) if claimed_by else None,
+        "decided_by": str(decided_by) if decided_by else None,
+        "thread_id": str(thread_id) if thread_id else None,
+        "log_channel_id": str(log_channel_id) if log_channel_id else None,
+        "log_message_id": str(log_message_id) if log_message_id else None,
     })
 
 

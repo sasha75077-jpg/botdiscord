@@ -12,6 +12,8 @@ import GoogleSheetsSettingsPage from '@/pages/admin/GoogleSheetsSettingsPage';
 import UserDashboard from '@/pages/user/Dashboard';
 import NewContractPage from '@/pages/contracts/NewContractPage';
 import NewApplicationPage from '@/pages/applications/NewApplicationPage';
+import ApplicationsPage from '@/pages/applications/ApplicationsPage';
+import ApplicationDetailPage from '@/pages/applications/ApplicationDetailPage';
 
 // Layouts
 import OwnerLayout from '@/layouts/OwnerLayout';
@@ -59,6 +61,9 @@ function App() {
           <Route path="/roles" element={<RolesPage />} />
           <Route path="/contracts" element={<div>Contracts</div>} />
           <Route path="/contracts/new" element={<NewContractPage />} />
+          <Route path="/applications" element={<ApplicationsPage />} />
+          <Route path="/applications/new" element={<NewApplicationPage />} />
+          <Route path="/applications/:id" element={<ApplicationDetailPage />} />
           <Route path="/reports" element={<div>Reports</div>} />
           <Route path="/users" element={<div>Users</div>} />
           <Route path="/settings" element={<div>Settings</div>} />
@@ -76,8 +81,9 @@ function App() {
           <Route path="/" element={<UserDashboard />} />
           <Route path="/contracts" element={<div>My Contracts (Recruiter)</div>} />
           <Route path="/contracts/new" element={<NewContractPage />} />
-          <Route path="/applications" element={<div>Applications (View Only)</div>} />
+          <Route path="/applications" element={<ApplicationsPage />} />
           <Route path="/applications/new" element={<NewApplicationPage />} />
+          <Route path="/applications/:id" element={<ApplicationDetailPage />} />
           <Route path="/profile" element={<div>My Profile</div>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
@@ -92,7 +98,9 @@ function App() {
         <Route path="/" element={<UserDashboard />} />
         <Route path="/contracts" element={<div>My Contracts</div>} />
         <Route path="/contracts/new" element={<NewContractPage />} />
+        <Route path="/applications" element={<ApplicationsPage />} />
         <Route path="/applications/new" element={<NewApplicationPage />} />
+        <Route path="/applications/:id" element={<ApplicationDetailPage />} />
         <Route path="/reports" element={<div>My Reports</div>} />
         <Route path="/profile" element={<div>My Profile</div>} />
         <Route path="*" element={<Navigate to="/" replace />} />

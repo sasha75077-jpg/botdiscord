@@ -25,6 +25,7 @@ export default function UserLayout({ children }: Props) {
   const navigation = [
     { name: 'Дашборд', href: '/', icon: LayoutDashboard },
     { name: 'Мои контракты', href: '/contracts', icon: FileText },
+    { name: 'Заявки', href: '/applications', icon: ClipboardList },
     { name: 'Мои отчеты', href: '/reports', icon: ClipboardList },
     { name: 'Профиль', href: '/profile', icon: User },
   ];

@@ -114,6 +114,24 @@ export const usersApi = {
   list: (guildId: string) => api.get(`/guilds/${guildId}/users/`),
 };
 
+// Applications API
+export const applicationsApi = {
+  list: (guildId: string, status?: string) =>
+    api.get(`/guilds/${guildId}/applications`, { params: { status } }),
+  get: (guildId: string, id: number) =>
+    api.get(`/guilds/${guildId}/applications/${id}`),
+  create: (guildId: string, answers: Record<string, string>) =>
+    api.post(`/guilds/${guildId}/applications`, { answers }),
+  claim: (guildId: string, id: number) =>
+    api.post(`/guilds/${guildId}/applications/${id}/claim`),
+  decide: (guildId: string, id: number, accepted: boolean, reason?: string) =>
+    api.post(`/guilds/${guildId}/applications/${id}/decide`, { accepted, reason }),
+  messages: (guildId: string, id: number) =>
+    api.get(`/guilds/${guildId}/applications/${id}/messages`),
+  postMessage: (guildId: string, id: number, content: string) =>
+    api.post(`/guilds/${guildId}/applications/${id}/messages`, { content }),
+};
+
 // Reports API
 export const reportsApi = {
   listBonus: (guildId: string, params?: any) =>

@@ -6,6 +6,8 @@ import { contractsRoutes } from './routes/contracts'
 import { usersRoutes } from './routes/users'
 import { permissionsRoutes } from './routes/permissions'
 import { logsRoutes } from './routes/logs'
+import { syncRoutes } from './routes/sync'
+import { applicationsRoutes } from './routes/applications'
 
 export interface Env {
   DB: D1Database
@@ -46,5 +48,7 @@ app.route('/guilds', contractsRoutes)
 app.route('/guilds', usersRoutes)
 app.route('/guilds', permissionsRoutes)
 app.route('/guilds', logsRoutes)
+app.route('/guilds', syncRoutes)
+app.route('/guilds', applicationsRoutes)
 
 export default app

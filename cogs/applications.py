@@ -244,7 +244,8 @@ class ApplicationsCog(commands.Cog):
                 )
                 try:
                     from services.api_sync import queue_application_sync
-                    queue_application_sync(str(ch.guild.id), app_id, str(cand_id), "PENDING")
+                    queue_application_sync(str(ch.guild.id), app_id, str(cand_id), "PENDING",
+                                           log_channel_id=str(ch.id), log_message_id=str(msg.id))
                 except Exception as e:
                     print(f"[api_sync] warn: {e}")
                 await self.refresh_message(app_id)
@@ -268,7 +269,8 @@ class ApplicationsCog(commands.Cog):
                 )
                 try:
                     from services.api_sync import queue_application_sync
-                    queue_application_sync(str(ch.guild.id), app_id, str(cand_id), "PENDING")
+                    queue_application_sync(str(ch.guild.id), app_id, str(cand_id), "PENDING",
+                                           log_channel_id=str(ch.id), log_message_id=str(panel_msg.id))
                 except Exception as e:
                     print(f"[api_sync] warn: {e}")
 
@@ -404,7 +406,8 @@ class ApplicationsCog(commands.Cog):
             )
             try:
                 from services.api_sync import queue_application_sync
-                queue_application_sync(str(guild.id), app_id, str(cand_id), "REJECTED", "Кандидат покинул сервер")
+                queue_application_sync(str(guild.id), app_id, str(cand_id), "REJECTED", "Кандидат покинул сервер",
+                                       decided_by=str(recruiter.id))
             except Exception as e:
                 print(f"[api_sync] warn: {e}")
             await self.refresh_message(
@@ -421,7 +424,8 @@ class ApplicationsCog(commands.Cog):
         )
         try:
             from services.api_sync import queue_application_sync
-            queue_application_sync(str(guild.id), app_id, str(cand_id), "CLAIMED")
+            queue_application_sync(str(guild.id), app_id, str(cand_id), "CLAIMED",
+                                   claimed_by=str(recruiter.id))
         except Exception as e:
             print(f"[api_sync] warn: {e}")
 
@@ -446,6 +450,12 @@ class ApplicationsCog(commands.Cog):
                     reason=f"Чат по заявке {app_id}",
                 )
                 await execute("UPDATE applications SET thread_id=? WHERE id=?", (str(thread.id), app_id))
+                try:
+                    from services.api_sync import queue_application_sync
+                    queue_application_sync(str(guild.id), app_id, str(cand_id), "CLAIMED",
+                                           claimed_by=str(recruiter.id), thread_id=str(thread.id))
+                except Exception as e:
+                    print(f"[api_sync] warn: {e}")
 
                 await thread.send(
                     "🗣️ Чат по заявке создан.\n"
@@ -488,7 +498,8 @@ class ApplicationsCog(commands.Cog):
             )
             try:
                 from services.api_sync import queue_application_sync
-                queue_application_sync(str(guild.id), app_id, str(cand_id), "REJECTED", "Кандидат покинул сервер")
+                queue_application_sync(str(guild.id), app_id, str(cand_id), "REJECTED", "Кандидат покинул сервер",
+                                       decided_by=str(interaction.user.id))
             except Exception as e:
                 print(f"[api_sync] warn: {e}")
             await self.refresh_message(
@@ -506,7 +517,8 @@ class ApplicationsCog(commands.Cog):
         )
         try:
             from services.api_sync import queue_application_sync
-            queue_application_sync(str(guild.id), app_id, str(cand_id), new_status, reason)
+            queue_application_sync(str(guild.id), app_id, str(cand_id), new_status, reason,
+                                   decided_by=str(interaction.user.id))
         except Exception as e:
             print(f"[api_sync] warn: {e}")
 
@@ -660,7 +672,9 @@ class ApplicationsCog(commands.Cog):
             )
             try:
                 from services.api_sync import queue_application_sync
-                queue_application_sync(str(message.guild.id), app_id, str(cand_id), "PENDING")
+                queue_application_sync(str(message.guild.id), app_id, str(cand_id), "PENDING",
+                                       log_channel_id=str(message.channel.id),
+                                       log_message_id=str(panel_msg.id))
             except Exception as e:
                 print(f"[api_sync] warn: {e}")
 

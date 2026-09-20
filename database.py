@@ -69,6 +69,12 @@ async def migrate_db():
             WHERE status IN ('NEW','TAKEN','APPROVED');
         """)
 
+        # site_id для связи локальных заявок с панелью
+        try:
+            await db.execute("ALTER TABLE applications ADD COLUMN site_id INTEGER")
+        except Exception:
+            pass  # колонка уже есть
+
         await db.commit()
     finally:
         await db.close()

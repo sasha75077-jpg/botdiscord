@@ -22,21 +22,31 @@ sync.post('/:guildId/applications/sync', async (c) => {
   if (!checkKey(c, c.env)) return c.json({ error: 'Forbidden' }, 403)
   const guildId = c.req.param('guildId')
   const body = await c.req.json<{
-    external_id: string; discord_id: string; status?: string; reason?: string
+    external_id: string; discord_id: string; status?: string; reason?: string;
+    claimed_by?: string; decided_by?: string; thread_id?: string;
+    log_channel_id?: string; log_message_id?: string;
   }>()
   if (!body.external_id || !body.discord_id) {
     return c.json({ error: 'Missing external_id or discord_id' }, 400)
   }
   const status = mapStatus(body.status, { CLAIMED: 'pending', NEW: 'pending', TAKEN: 'pending' })
 
-  const existing = await c.env.DB.prepare(
-    'SELECT id FROM applications WHERE external_id = ?'
-  ).bind(body.external_id).first<{ id: number }>()
+  const existing: any = await c.env.DB.prepare(
+    'SELECT * FROM applications WHERE external_id = ?'
+  ).bind(body.external_id).first()
 
   if (existing) {
     await c.env.DB.prepare(
-      'UPDATE applications SET status = ?, admin_notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-    ).bind(status, body.reason || null, existing.id).run()
+      `UPDATE applications SET status = ?, admin_notes = ?,
+        claimed_by = COALESCE(?, claimed_by), decided_by = COALESCE(?, decided_by),
+        thread_id = COALESCE(?, thread_id),
+        log_channel_id = COALESCE(?, log_channel_id),
+        log_message_id = COALESCE(?, log_message_id),
+        updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+    ).bind(status, body.reason || existing.admin_notes,
+      body.claimed_by || null, body.decided_by || null,
+      body.thread_id || null, body.log_channel_id || null, body.log_message_id || null,
+      existing.id).run()
     return c.json({ id: existing.id, updated: true })
   }
   const res = await c.env.DB.prepare(
