@@ -333,8 +333,46 @@ async def _poll_guild_bonus(guild_id: str):
         await set_setting("bonus_poll_cursor", newest, guild_id)
 
 
+async def push_users(guild_id: str):
+    """Залить юзеров сервера на сайт (static и членство)."""
+    if not SYNC_SECRET:
+        return 0
+    try:
+        rows = await fetch_all(
+            "SELECT discord_id, static FROM users WHERE guild_id = ?", (guild_id,))
+    except Exception as e:
+        print(f"[users-push] warn fetch: {e}")
+        return 0
+    if not rows:
+        return 0
+    try:
+        await asyncio.to_thread(
+            _api_post, f"/guilds/{guild_id}/users/sync",
+            {"users": [{"discord_id": r["discord_id"], "static": r.get("static")} for r in rows]})
+        return len(rows)
+    except Exception as e:
+        print(f"[users-push] warn api: {e}")
+        return 0
+
+
+def _api_post(path, payload):
+    import urllib.request as _u
+    import json as _j
+    import os as _o
+    key = _o.getenv("PANEL_SYNC_SECRET", "")
+    if not key:
+        return
+    req = _u.Request(
+        API_URL + path,
+        data=_j.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
+        method="POST",
+    )
+    with _u.urlopen(req, timeout=30) as r:
+        r.read()
+
+
 async def nudge_site_contracts(bot):
-    """Напомнить взявшим контракты без решения (10+ минут)."""
     if bot is None:
         return
     try:

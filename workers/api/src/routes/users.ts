@@ -4,7 +4,30 @@ import { verifyToken } from './auth'
 
 const users = new Hono<{ Bindings: Env }>()
 
-// PUT /guilds/:guildId/users/me - свой static для выгрузки премий
+// POST /guilds/:guildId/users/sync - бот: пачка юзеров (SYNC_SECRET)
+users.post('/:guildId/users/sync', async (c) => {
+  const key = c.env.SYNC_SECRET
+  const token = (c.req.header('Authorization') || '').substring(7)
+  if (!key || token !== key) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+  const guildId = c.req.param('guildId')
+  const body = await c.req.json<{ users?: Array<{ discord_id: string; static?: string }> }>()
+  const list = (body.users || []).filter((u) => u.discord_id).slice(0, 2000)
+  if (list.length === 0) return c.json({ updated: 0 })
+
+  const batch = list.map((u) =>
+    c.env.DB.prepare(
+      `INSERT INTO users (discord_id, guild_id, static) VALUES (?, ?, ?)
+       ON CONFLICT(discord_id, guild_id) DO UPDATE SET static = COALESCE(?, static)`
+    ).bind(u.discord_id, guildId, u.static || null, u.static || null)
+  )
+  // D1 batch лимит - чанками по 100
+  for (let i = 0; i < batch.length; i += 100) {
+    await c.env.DB.batch(batch.slice(i, i + 100))
+  }
+  return c.json({ updated: list.length })
+})
 users.put('/:guildId/users/me', async (c) => {
   const header = c.req.header('Authorization')
   if (!header?.startsWith('Bearer ')) {

@@ -321,6 +321,12 @@ async def set_setting(key: str, value: str, guild_id: str = None):
             """,
             (guild_id, key, value)
         )
+        # Пуш на сайт (там побеждает свежий updated_at)
+        try:
+            from services.api_sync import queue_sync
+            queue_sync(f"/guilds/{guild_id}/settings", {"settings": {key: value}}, method="PUT")
+        except Exception as e:
+            print(f"[api_sync] warn setting: {e}")
     else:
         # Старая схема
         await execute(
