@@ -123,13 +123,13 @@ export const reportsApi = {
 // Permissions API
 export const permissionsApi = {
   list: (guildId: string) =>
-    api.get(`/api/guilds/${guildId}/permissions`),
+    api.get(`/guilds/${guildId}/permissions`),
   assign: (guildId: string, discordId: string, role: string) =>
-    api.post(`/api/guilds/${guildId}/permissions`, { discord_id: discordId, role }),
+    api.post(`/guilds/${guildId}/permissions`, { discord_id: discordId, role }),
   remove: (guildId: string, discordId: string) =>
-    api.delete(`/api/guilds/${guildId}/permissions/${discordId}`),
+    api.delete(`/guilds/${guildId}/permissions/${discordId}`),
   getMyRole: (guildId: string) =>
-    api.get(`/api/guilds/${guildId}/permissions/me`),
+    api.get(`/guilds/${guildId}/permissions/me`),
 };
 
 export default api;

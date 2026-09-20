@@ -38,4 +38,10 @@ app.route('/contracts', contractsRoutes)
 app.route('/users', usersRoutes)
 app.route('/permissions', permissionsRoutes)
 
+// Nested under /guilds to match frontend (old backend contract):
+// /guilds/:guildId/contracts/*, /guilds/:guildId/users/*, /guilds/:guildId/permissions/*
+app.route('/guilds', contractsRoutes)
+app.route('/guilds', usersRoutes)
+app.route('/guilds', permissionsRoutes)
+
 export default app

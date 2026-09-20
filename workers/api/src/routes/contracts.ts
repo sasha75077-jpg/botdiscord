@@ -28,6 +28,22 @@ contracts.get('/:guildId/contracts/', async (c) => {
   return c.json(result.results)
 })
 
+// GET /guilds/:guildId/contracts/stats (must be before :contractId route)
+contracts.get('/:guildId/contracts/stats', async (c) => {
+  const guildId = c.req.param('guildId')
+
+  const stats = await c.env.DB.prepare(`
+    SELECT
+      status,
+      COUNT(*) as count
+    FROM contracts
+    WHERE guild_id = ?
+    GROUP BY status
+  `).bind(guildId).all()
+
+  return c.json(stats.results)
+})
+
 // GET /guilds/:guildId/contracts/:contractId
 contracts.get('/:guildId/contracts/:contractId', async (c) => {
   const guildId = c.req.param('guildId')
@@ -86,22 +102,6 @@ contracts.delete('/:guildId/contracts/:contractId', async (c) => {
   ).bind(guildId, contractId).run()
 
   return c.json({ message: 'Contract deleted' })
-})
-
-// GET /guilds/:guildId/contracts/stats
-contracts.get('/:guildId/contracts/stats', async (c) => {
-  const guildId = c.req.param('guildId')
-
-  const stats = await c.env.DB.prepare(`
-    SELECT
-      status,
-      COUNT(*) as count
-    FROM contracts
-    WHERE guild_id = ?
-    GROUP BY status
-  `).bind(guildId).all()
-
-  return c.json(stats.results)
 })
 
 export const contractsRoutes = contracts

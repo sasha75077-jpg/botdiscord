@@ -20,12 +20,15 @@ export default function LoginPage() {
 
     try {
       const { data } = await authApi.ownerLogin(email, password);
+      // Сохранить токены ДО запроса профиля, иначе interceptor пойдет без Authorization
+      localStorage.setItem('access_token', data.access_token);
+      localStorage.setItem('refresh_token', data.refresh_token);
       const userResponse = await authApi.getCurrentUser();
 
       login(data.access_token, data.refresh_token, userResponse.data);
       navigate('/');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Ошибка входа');
+      setError(err.response?.data?.error || err.response?.data?.detail || 'Ошибка входа');
     } finally {
       setLoading(false);
     }

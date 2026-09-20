@@ -26,13 +26,16 @@ export default function DiscordCallbackPage() {
         const guildId = state?.startsWith('guild:') ? state.split(':')[1] : undefined;
 
         const { data } = await authApi.discordCallback(code, guildId);
+        // Сохранить токены ДО запроса профиля, иначе interceptor пойдет без Authorization
+        localStorage.setItem('access_token', data.access_token);
+        localStorage.setItem('refresh_token', data.refresh_token);
         const userResponse = await authApi.getCurrentUser();
 
         login(data.access_token, data.refresh_token, userResponse.data);
         navigate('/');
       } catch (err: any) {
         console.error('Discord callback error:', err);
-        setError(err.response?.data?.detail || 'Ошибка авторизации через Discord');
+        setError(err.response?.data?.error || err.response?.data?.detail || 'Ошибка авторизации через Discord');
         setTimeout(() => navigate('/login'), 3000);
       }
     };

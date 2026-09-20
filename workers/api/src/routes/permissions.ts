@@ -11,7 +11,7 @@ permissions.get('/:guildId/permissions', async (c) => {
     'SELECT * FROM permissions WHERE guild_id = ? ORDER BY role DESC'
   ).bind(guildId).all()
 
-  return c.json(result.results)
+  return c.json({ permissions: result.results })
 })
 
 // POST /guilds/:guildId/permissions

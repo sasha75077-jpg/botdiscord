@@ -24,7 +24,14 @@ guilds.get('/:guildId', async (c) => {
     return c.json({ error: 'Guild not found' }, 404)
   }
 
-  return c.json(guild)
+  const counts = await c.env.DB.prepare(
+    `SELECT
+      (SELECT COUNT(*) FROM users WHERE guild_id = ?) as total_users,
+      (SELECT COUNT(*) FROM contracts WHERE guild_id = ?) as total_contracts,
+      (SELECT COUNT(*) FROM contracts WHERE guild_id = ? AND status = 'pending') as pending_contracts`
+  ).bind(guildId, guildId, guildId).first()
+
+  return c.json({ ...guild, ...counts })
 })
 
 // GET /guilds/:guildId/settings

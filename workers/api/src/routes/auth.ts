@@ -208,13 +208,13 @@ auth.post('/owner/login', async (c) => {
 
   // Create tokens
   const accessToken = await createToken(
-    { user_type: 'owner', email: owner.email },
+    { user_type: 'owner', email: owner.email, role: 'owner' },
     c.env.SECRET_KEY,
     '1h'
   )
 
   const refreshToken = await createToken(
-    { user_type: 'owner', email: owner.email },
+    { user_type: 'owner', email: owner.email, role: 'owner' },
     c.env.SECRET_KEY,
     '7d'
   )
@@ -242,12 +242,12 @@ auth.post('/refresh', async (c) => {
 
   if (userType === 'owner') {
     accessToken = await createToken(
-      { user_type: 'owner', email: payload.email },
+      { user_type: 'owner', email: payload.email, role: 'owner' },
       c.env.SECRET_KEY,
       '1h'
     )
     newRefreshToken = await createToken(
-      { user_type: 'owner', email: payload.email },
+      { user_type: 'owner', email: payload.email, role: 'owner' },
       c.env.SECRET_KEY,
       '7d'
     )
