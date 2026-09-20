@@ -59,7 +59,7 @@ def queue_contract_sync(guild_id, ts, discord_id, contract_type,
 
 def queue_application_sync(guild_id, app_id, discord_id, status="PENDING", reason=None,
                            claimed_by=None, decided_by=None, thread_id=None,
-                           log_channel_id=None, log_message_id=None):
+                           log_channel_id=None, log_message_id=None, answers=None):
     """Синхронизация заявки (external_id = uuid бота)."""
     if not guild_id or not app_id or not discord_id:
         return
@@ -73,6 +73,7 @@ def queue_application_sync(guild_id, app_id, discord_id, status="PENDING", reaso
         "thread_id": str(thread_id) if thread_id else None,
         "log_channel_id": str(log_channel_id) if log_channel_id else None,
         "log_message_id": str(log_message_id) if log_message_id else None,
+        "answers": answers or None,
     })
 
 
@@ -101,4 +102,15 @@ def queue_promo_sync(guild_id, report_id, discord_id, from_rank=None, to_rank=No
         "to_rank": str(to_rank) if to_rank is not None else None,
         "status": status or "NEW",
         "reason": reason,
+    })
+
+
+def queue_app_message(guild_id, external_id, author_id, content):
+    """Сообщение из Discord-треда в чат сайта."""
+    if not guild_id or not external_id or not author_id or not (content or "").strip():
+        return
+    queue_sync(f"/guilds/{guild_id}/applications-messages/sync", {
+        "external_id": str(external_id),
+        "author_discord_id": str(author_id),
+        "content": str(content)[:2000],
     })

@@ -24,7 +24,7 @@ sync.post('/:guildId/applications/sync', async (c) => {
   const body = await c.req.json<{
     external_id: string; discord_id: string; status?: string; reason?: string;
     claimed_by?: string; decided_by?: string; thread_id?: string;
-    log_channel_id?: string; log_message_id?: string;
+    log_channel_id?: string; log_message_id?: string; answers?: Record<string, string>;
   }>()
   if (!body.external_id || !body.discord_id) {
     return c.json({ error: 'Missing external_id or discord_id' }, 400)
@@ -42,16 +42,21 @@ sync.post('/:guildId/applications/sync', async (c) => {
         thread_id = COALESCE(?, thread_id),
         log_channel_id = COALESCE(?, log_channel_id),
         log_message_id = COALESCE(?, log_message_id),
+        answers = COALESCE(?, answers),
         updated_at = CURRENT_TIMESTAMP WHERE id = ?`
     ).bind(status, body.reason || existing.admin_notes,
       body.claimed_by || null, body.decided_by || null,
       body.thread_id || null, body.log_channel_id || null, body.log_message_id || null,
+      body.answers ? JSON.stringify(body.answers) : null,
       existing.id).run()
     return c.json({ id: existing.id, updated: true })
   }
   const res = await c.env.DB.prepare(
-    'INSERT INTO applications (external_id, guild_id, discord_id, status, admin_notes) VALUES (?, ?, ?, ?, ?)'
-  ).bind(body.external_id, guildId, body.discord_id, status, body.reason || null).run()
+    'INSERT INTO applications (external_id, guild_id, discord_id, status, admin_notes, claimed_by, decided_by, thread_id, log_channel_id, log_message_id, answers) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(body.external_id, guildId, body.discord_id, status, body.reason || null,
+    body.claimed_by || null, body.decided_by || null,
+    body.thread_id || null, body.log_channel_id || null, body.log_message_id || null,
+    body.answers ? JSON.stringify(body.answers) : null).run()
   return c.json({ id: res.meta.last_row_id, created: true })
 })
 
@@ -110,6 +115,35 @@ sync.post('/:guildId/promotion-reports/sync', async (c) => {
     'INSERT INTO promotion_reports (external_id, guild_id, discord_id, from_rank, to_rank, status, reason) VALUES (?, ?, ?, ?, ?, ?, ?)'
   ).bind(body.external_id, guildId, body.discord_id, body.from_rank || null, body.to_rank || null, status, body.reason || null).run()
   return c.json({ id: res.meta.last_row_id, created: true })
+})
+
+// POST /guilds/:guildId/applications-messages/sync - бот: сообщение из Discord в чат сайта
+sync.post('/:guildId/applications-messages/sync', async (c) => {
+  if (!checkKey(c, c.env)) return c.json({ error: 'Forbidden' }, 403)
+  const guildId = c.req.param('guildId')
+  const body = await c.req.json<{ external_id: string; author_discord_id: string; content: string }>()
+  const content = (body.content || '').trim().slice(0, 2000)
+  if (!body.external_id || !body.author_discord_id || !content) {
+    return c.json({ error: 'Missing fields' }, 400)
+  }
+  const app: any = await c.env.DB.prepare(
+    'SELECT * FROM applications WHERE external_id = ? AND guild_id = ?'
+  ).bind(body.external_id, guildId).first()
+  if (!app) return c.json({ error: 'Application not found' }, 404)
+
+  // Писать могут кандидат, взявший, админ/овнер
+  const author = body.author_discord_id
+  const privileged = await c.env.DB.prepare(
+    "SELECT role FROM permissions WHERE guild_id = ? AND discord_id = ? AND role IN ('admin', 'owner')"
+  ).bind(guildId, author).first()
+  if (author !== app.discord_id && author !== app.claimed_by && !privileged) {
+    return c.json({ error: 'Only taker or candidate may write' }, 403)
+  }
+
+  const res = await c.env.DB.prepare(
+    'INSERT INTO application_messages (application_id, author_discord_id, content, from_site, delivered_to_discord, delivered_to_site) VALUES (?, ?, ?, 0, 1, 1)'
+  ).bind(app.id, author, content).run()
+  return c.json({ id: res.meta.last_row_id })
 })
 
 export const syncRoutes = sync
