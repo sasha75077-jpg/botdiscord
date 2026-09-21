@@ -512,7 +512,7 @@ async def pull_ranks(guild_id: str):
         await execute("DELETE FROM rank_requirements_alt")
         for r in (req or {}).get("alt", []) or []:
             await execute(
-                "INSERT INTO rank_requirements_alt (rank_from, rank_to, family_contracts, tuning_contracts, system_type) VALUES (?, ?, ?, ?, 'main')",
+                "INSERT INTO rank_requirements_alt (rank_from, rank_to, family_contracts, tuning_contracts) VALUES (?, ?, ?, ?)",
                 (r.get("rank_from"), r.get("rank_to"), r.get("family_contracts") or 0,
                  r.get("tuning_contracts") or 0),
             )

@@ -87,6 +87,29 @@ async def migrate_db():
         except Exception:
             pass  # колонка уже есть
 
+        # permissions: роль recruiter в CHECK (старые БД без нее)
+        try:
+            async with db.execute("SELECT sql FROM sqlite_master WHERE name='permissions'") as cursor:
+                prow = await cursor.fetchone()
+            if prow and "'recruiter'" not in (prow[0] or ''):
+                await db.execute("""CREATE TABLE permissions_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    guild_id TEXT NOT NULL,
+                    discord_id TEXT NOT NULL,
+                    role TEXT NOT NULL CHECK(role IN ('owner', 'admin', 'recruiter', 'user')),
+                    granted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    granted_by TEXT,
+                    FOREIGN KEY (guild_id) REFERENCES guilds(guild_id) ON DELETE CASCADE,
+                    UNIQUE(guild_id, discord_id))""")
+                await db.execute(
+                    "INSERT INTO permissions_new (id, guild_id, discord_id, role, granted_at, granted_by)"
+                    " SELECT id, guild_id, discord_id, role, granted_at, granted_by FROM permissions")
+                await db.execute("DROP TABLE permissions")
+                await db.execute("ALTER TABLE permissions_new RENAME TO permissions")
+                print("✅ permissions: добавлен recruiter в CHECK")
+        except Exception as e:
+            print(f"⚠️  permissions migrate: {e}")
+
         # взятие и напоминания
         for ddl in (
             "ALTER TABLE contracts ADD COLUMN claimed_by TEXT",
