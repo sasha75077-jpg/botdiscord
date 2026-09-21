@@ -532,7 +532,21 @@ def fmt_price(p: float) -> str:
 
 
 async def build_prices_embed() -> discord.Embed:
-    embed = discord.Embed(title="Цены выплат по контрактам", color=0x95A5A6)
+    embed = discord.Embed(
+        title="💰 Выплаты по контрактам",
+        description="Сколько платим за каждый контракт. Цены меняет администрация.",
+        color=0x2ECC71,
+    )
+
+    cat_emoji = {
+        "Агитации": "📣",
+        "Товары": "📦",
+        "Ателье": "🧵",
+        "Тюнинг": "🔧",
+        "Курьер": "🛵",
+        "Руда (доставка)": "⛏️",
+        "Руда (добыча)": "💎",
+    }
 
     for cat in CATEGORY_ORDER:
         rows = await get_prices_where(CATEGORY_QUERIES[cat])
@@ -544,11 +558,12 @@ async def build_prices_embed() -> discord.Embed:
             k = r["item_key"]
             p = float(r["price"] or 0)
             name = PRICE_LABELS.get(k, k)
-            lines.append(f"{name} — {fmt_price(p)}")
+            lines.append(f"▪️ {name} — **{fmt_price(p)}**")
 
-        embed.add_field(name=cat, value="\n".join(lines), inline=False)
+        emoji = cat_emoji.get(cat, "📌")
+        embed.add_field(name=f"{emoji} {cat}", value="\n".join(lines), inline=False)
 
-    embed.set_footer(text="Цены берутся из базы. Обновление: /refresh_prices")
+    embed.set_footer(text="Обновляется автоматически • /prices_ui для правок (админ)")
     return embed
 
 
@@ -780,10 +795,10 @@ async def create_promo_report_and_post(
     # 1) создаём репорт
     await execute(
         """
-        INSERT INTO promotion_reports(discord_id, from_rank_id, to_rank_id, system_type, submitted_at, status)
-        VALUES (?, ?, ?, ?, datetime('now'), 'NEW')
+        INSERT INTO promotion_reports(guild_id, discord_id, from_rank_id, to_rank_id, system_type, submitted_at, status)
+        VALUES (?, ?, ?, ?, ?, datetime('now'), 'NEW')
         """,
-        (str(discord_id), int(from_rank_id), int(to_rank_id), str(system_type)),
+        (str(interaction.guild.id) if interaction.guild else None, str(discord_id), int(from_rank_id), int(to_rank_id), str(system_type)),
     )
 
     rep = await fetch_one(
@@ -3672,6 +3687,15 @@ async def post_promo_report_message(client: discord.Client, report_id: int):
         return {"ok": False, "reason": "report_not_found"}
 
     raw = await get_setting("promochannelid")
+    try:
+        _grow = await fetch_one("SELECT guild_id FROM promotion_reports WHERE report_id = ?", (int(report_id),))
+        _gg = (_grow or {}).get("guild_id")
+        if _gg:
+            _per = await get_setting("promo_log_channel_id", str(_gg))
+            if _per:
+                raw = _per
+    except Exception:
+        pass
     if not raw:
         return {"ok": False, "reason": "promochannelid_not_set"}
 
@@ -3701,19 +3725,38 @@ async def post_promo_report_message(client: discord.Client, report_id: int):
 
 
 class PromoActionView(View):
-    def __init__(self, report_id: int):
-        super().__init__(timeout=300)
+    def __init__(self, report_id: int = 0):
+        super().__init__(timeout=None)
         self.report_id = int(report_id)
 
-    @discord.ui.button(label="Одобрить", style=discord.ButtonStyle.success)
+    def _resolve_id(self, interaction: discord.Interaction) -> int:
+        if self.report_id:
+            return int(self.report_id)
+        try:
+            title = (interaction.message.embeds[0].title if interaction.message and interaction.message.embeds else "") or ""
+            import re as _re
+            m = _re.search(r"#(\d+)", title)
+            if m:
+                return int(m.group(1))
+        except Exception:
+            pass
+        return 0
+
+    @discord.ui.button(label="Одобрить", style=discord.ButtonStyle.success, custom_id="promo:approve")
     async def approve_btn(self, interaction: discord.Interaction, button: Button):
         # defer сразу — до любых тяжёлых операций
         await interaction.response.defer(ephemeral=True)
-        await approve_promotion(interaction, self.report_id)
+        rid = self._resolve_id(interaction)
+        if not rid:
+            return await interaction.followup.send("❌ Не нашел отчет.", ephemeral=True)
+        await approve_promotion(interaction, rid)
 
-    @discord.ui.button(label="Отклонить", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="Отклонить", style=discord.ButtonStyle.danger, custom_id="promo:reject")
     async def reject_btn(self, interaction: discord.Interaction, button: Button):
-        modal = RejectPromoModal(self.report_id)
+        rid = self._resolve_id(interaction)
+        if not rid:
+            return await interaction.response.send_message("❌ Не нашел отчет.", ephemeral=True)
+        modal = RejectPromoModal(rid)
         await interaction.response.send_modal(modal)
 
 
@@ -4454,3 +4497,4 @@ async def setup(bot: commands.Bot):
     await bot.add_cog(AdminPanel(bot))
     bot.add_view(BonusActionView(0))
     bot.add_view(ContractActionView(0))
+    bot.add_view(PromoActionView(0))

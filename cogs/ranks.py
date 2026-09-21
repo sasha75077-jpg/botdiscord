@@ -1,7 +1,83 @@
-from database import fetch_one, execute
+from database import fetch_one, execute, fetch_all, get_setting, set_setting
+import discord
 
 SYSTEM_MAIN = "main"
 SYSTEM_ALT = "alt"
+
+RANKS_PANEL_CH_KEY = "ranks_panel_channel_id"
+RANKS_PANEL_MSG_KEY = "ranks_panel_message_id"
+
+
+async def build_ranks_embed(guild_id: str) -> discord.Embed:
+    ranks = await fetch_all(
+        "SELECT id, name, role_id FROM ranks WHERE guild_id = ? ORDER BY sort_order ASC",
+        (guild_id,),
+    )
+    main_reqs = {f"{r['rank_from']}->{r['rank_to']}": r["family_contracts"]
+                 for r in await fetch_all("SELECT rank_from, rank_to, family_contracts FROM rank_requirements_main", ())}
+    alt_reqs = {f"{r['rank_from']}->{r['rank_to']}": r
+                for r in await fetch_all("SELECT rank_from, rank_to, family_contracts, tuning_contracts FROM rank_requirements_alt", ())}
+
+    embed = discord.Embed(title="📈 Система повышения", color=0xF1C40F,
+                          description="Основная ветка — семейные контракты.\nАльтернативная — семейные + личные (тюнинг, курьер).")
+    for i, r in enumerate(ranks):
+        role_mention = f"<@&{r['role_id']}>" if r.get("role_id") else "—"
+        lines = [f"Роль: {role_mention}"]
+        if i < len(ranks) - 1:
+            nxt = ranks[i + 1]
+            key = f"{r['id']}->{nxt['id']}"
+            mf = main_reqs.get(key)
+            lines.append(f"Основная: семейных {mf if mf is not None else '—'}")
+            a = alt_reqs.get(key)
+            if a:
+                lines.append(f"Альт: семейных {a['family_contracts']}, личных {a['tuning_contracts']}")
+        embed.add_field(name=f"{i + 1}. {r['name']}", value="\n".join(lines), inline=False)
+    if not ranks:
+        embed.description = "Лестница рангов пуста — настрой на сайте (Ранги)."
+    embed.set_footer(text="Обновляется автоматически")
+    return embed
+
+
+async def ensure_ranks_panel(bot, guild: discord.Guild) -> str:
+    gid = str(guild.id)
+    ch_id = (await get_setting("promo_log_channel_id", gid)
+             or await get_setting("promochannelid") or "").strip()
+    if not ch_id or not ch_id.isdigit():
+        return "no-channel"
+    channel = guild.get_channel(int(ch_id))
+    if channel is None:
+        try:
+            channel = await guild.fetch_channel(int(ch_id))
+        except Exception:
+            return "no-channel"
+    msg_id = (await get_setting(RANKS_PANEL_MSG_KEY, gid) or "").strip()
+    msg = None
+    if msg_id and msg_id.isdigit():
+        try:
+            msg = await channel.fetch_message(int(msg_id))
+        except Exception:
+            msg = None
+    embed = await build_ranks_embed(gid)
+    if msg is None:
+        msg = await channel.send(embed=embed)
+        try:
+            await msg.pin()
+        except Exception:
+            pass
+        await set_setting(RANKS_PANEL_MSG_KEY, str(msg.id), gid)
+        return "posted"
+    try:
+        old = msg.embeds[0].to_dict() if msg.embeds else {}
+        if old != embed.to_dict():
+            await msg.edit(embed=embed)
+    except Exception as e:
+        print(f"[ranks-panel] warn edit: {e}")
+    try:
+        if not msg.pinned:
+            await msg.pin()
+    except Exception:
+        pass
+    return "ok"
 
 
 async def ensure_user(discord_id: str, guild_id: str):

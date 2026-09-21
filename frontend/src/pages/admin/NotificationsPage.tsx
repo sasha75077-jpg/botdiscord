@@ -20,6 +20,7 @@ export default function NotificationsPage() {
   const [uploadChannel, setUploadChannel] = useState('');
   const [appsChannel, setAppsChannel] = useState('');
   const [bonusChannel, setBonusChannel] = useState('');
+  const [promoChannel, setPromoChannel] = useState('');
   const [pingIds, setPingIds] = useState<string[]>([]);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -46,6 +47,7 @@ export default function NotificationsPage() {
     setUploadChannel(s.contracts_upload_channel_id || '');
     setAppsChannel(s.applications_log_channel_id || '');
     setBonusChannel(s.bonus_log_channel_id || '');
+    setPromoChannel(s.promo_log_channel_id || '');
     setPingIds(String(s.contracts_ping_role_ids || '').split(',').map((x: string) => x.trim()).filter(Boolean));
   }, [settings]);
 
@@ -57,6 +59,7 @@ export default function NotificationsPage() {
         contracts_upload_channel_id: uploadChannel,
         applications_log_channel_id: appsChannel,
         bonus_log_channel_id: bonusChannel,
+        promo_log_channel_id: promoChannel,
         contracts_ping_role_ids: pingIds.join(','),
       }),
     onSuccess: () => {
@@ -140,6 +143,20 @@ export default function NotificationsPage() {
         </p>
         <label className="block text-sm font-medium mb-2">Канал</label>
         <select value={bonusChannel} onChange={(e) => setBonusChannel(e.target.value)} className="input w-full max-w-md">
+          <option value="">— не выбран —</option>
+          {channels.map((ch: any) => (
+            <option key={ch.id} value={ch.id}># {ch.name}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="card">
+        <h2 className="text-xl font-bold mb-1">Канал повышений</h2>
+        <p className="text-sm text-gray-500 mb-3">
+          Сюда бот постит отчеты на повышение и лестницу рангов (обновляется сама).
+        </p>
+        <label className="block text-sm font-medium mb-2">Канал</label>
+        <select value={promoChannel} onChange={(e) => setPromoChannel(e.target.value)} className="input w-full max-w-md">
           <option value="">— не выбран —</option>
           {channels.map((ch: any) => (
             <option key={ch.id} value={ch.id}># {ch.name}</option>

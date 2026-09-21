@@ -263,6 +263,8 @@ guilds.get('/:guildId/dashboard', async (c) => {
 
   // Ранг по Discord-ролям
   let myRank: string | null = null
+  let myRankId: number | null = null
+  let rankRows: Array<{ id: number; name: string; role_id: string; sort_order: number }> = []
   try {
     if (c.env.DISCORD_BOT_TOKEN) {
       const mresp = await fetch(
@@ -272,15 +274,53 @@ guilds.get('/:guildId/dashboard', async (c) => {
       if (mresp.ok) {
         const member = await mresp.json<{ roles: string[] }>()
         const ranks = await c.env.DB.prepare(
-          'SELECT name, role_id, sort_order FROM ranks WHERE guild_id = ?'
+          'SELECT id, name, role_id, sort_order FROM ranks WHERE guild_id = ?'
         ).bind(guildId).all()
-        let best: { name: string; sort_order: number } | null = null
-        for (const r of ranks.results as Array<{ name: string; role_id: string; sort_order: number }>) {
+        rankRows = ranks.results as typeof rankRows
+        let best: typeof rankRows[0] | null = null
+        for (const r of rankRows) {
           if (r.role_id && (member.roles || []).includes(r.role_id)) {
             if (!best || r.sort_order > best.sort_order) best = r
           }
         }
-        myRank = best?.name || null
+        if (best) {
+          myRank = best.name
+          myRankId = best.id
+        }
+      }
+    }
+  } catch { /* ignore */ }
+
+  // Прогресс до следующего ранга
+  let progress: any = null
+  try {
+    if (myRankId !== null) {
+      const sorted = [...rankRows].sort((a, b) => a.sort_order - b.sort_order)
+      const idx = sorted.findIndex((r) => r.id === myRankId)
+      const next = sorted[idx + 1]
+      if (next) {
+        const fam = await c.env.DB.prepare(
+          `SELECT COUNT(*) as c FROM contracts WHERE guild_id = ? AND discord_id = ?
+           AND status = 'approved' AND contract_type NOT IN ('тюнинг', 'курьер-еды')`
+        ).bind(guildId, discordId).first<{ c: number }>()
+        const per = await c.env.DB.prepare(
+          `SELECT COUNT(*) as c FROM contracts WHERE guild_id = ? AND discord_id = ?
+           AND status = 'approved' AND contract_type IN ('тюнинг', 'курьер-еды')`
+        ).bind(guildId, discordId).first<{ c: number }>()
+        const reqMain = await c.env.DB.prepare(
+          'SELECT family_contracts FROM rank_requirements_main WHERE rank_from = ? AND rank_to = ?'
+        ).bind(myRankId, next.id).first<{ family_contracts: number }>()
+        const reqAlt = await c.env.DB.prepare(
+          'SELECT family_contracts, tuning_contracts FROM rank_requirements_alt WHERE rank_from = ? AND rank_to = ?'
+        ).bind(myRankId, next.id).first<{ family_contracts: number; tuning_contracts: number }>()
+        progress = {
+          next_rank: next.name,
+          family_done: fam?.c || 0,
+          family_need: reqMain?.family_contracts ?? null,
+          personal_done: per?.c || 0,
+          personal_need: reqAlt?.tuning_contracts ?? null,
+          alt_family_need: reqAlt?.family_contracts ?? null,
+        }
       }
     }
   } catch { /* ignore */ }
@@ -294,6 +334,7 @@ guilds.get('/:guildId/dashboard', async (c) => {
     my_contracts: myContracts,
     my_recent: recent.results,
     my_rank: myRank,
+    progress,
   })
 })
 
