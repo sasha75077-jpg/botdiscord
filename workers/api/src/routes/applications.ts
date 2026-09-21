@@ -140,7 +140,8 @@ async function checkApplicant(env: Env, guildId: string, discordId: string): Pro
 apps.post('/:guildId/applications', async (c) => {
   const guildId = c.req.param('guildId')
   const u = await me(c, c.env)
-  if (!u || !u.discord_id) return c.json({ error: 'Forbidden' }, 403)
+  if (!u) return c.json({ error: 'Сессия истекла, войди заново' }, 401)
+  if (!u.discord_id) return c.json({ error: 'Подача только через Discord-вход' }, 403)
   if (u.user_type !== 'owner') {
     const block = await checkApplicant(c.env, guildId, u.discord_id)
     if (block) return c.json({ error: block }, 403)

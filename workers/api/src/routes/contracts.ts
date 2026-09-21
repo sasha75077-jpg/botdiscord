@@ -74,8 +74,11 @@ contracts.get('/:guildId/contracts/', async (c) => {
 // в базу едут только CDN-ссылки.
 contracts.post('/:guildId/contracts/', async (c) => {
   const guildId = c.req.param('guildId')
+  const header = c.req.header('Authorization')
+  if (!header?.startsWith('Bearer ')) return c.json({ error: 'Сессия истекла, войди заново' }, 401)
   const who = await caller(c, c.env)
-  if (!who || !who.discord_id) return c.json({ error: 'Forbidden' }, 403)
+  if (!who) return c.json({ error: 'Сессия истекла, войди заново' }, 401)
+  if (!who.discord_id) return c.json({ error: 'Подача только через Discord-вход' }, 403)
   if (who.role !== 'owner' && who.guild_id !== guildId) return c.json({ error: 'Forbidden' }, 403)
 
   const contentType = c.req.header('Content-Type') || ''

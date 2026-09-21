@@ -93,9 +93,9 @@ bonus.get('/:guildId/bonus', async (c) => {
 bonus.post('/:guildId/bonus', async (c) => {
   const guildId = c.req.param('guildId')
   const who = await caller(c, c.env)
-  if (!who || !who.discord_id || !sameGuild(who, guildId)) {
-    return c.json({ error: 'Forbidden' }, 403)
-  }
+  if (!who) return c.json({ error: 'Сессия истекла, войди заново' }, 401)
+  if (!who.discord_id) return c.json({ error: 'Подача только через Discord-вход' }, 403)
+  if (!sameGuild(who, guildId)) return c.json({ error: 'Forbidden' }, 403)
 
   const body = await c.req.json<{ week_start?: string; week_end?: string }>()
   let { week_start, week_end } = body
