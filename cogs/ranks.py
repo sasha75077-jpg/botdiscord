@@ -90,14 +90,14 @@ async def ensure_user(discord_id: str, guild_id: str):
     if not u:
         # Найти ранг "Freak" для этого сервера
         freak = await fetch_one(
-            "SELECT rank_id FROM ranks WHERE guild_id = ? AND name = 'Freak' LIMIT 1",
+            "SELECT id FROM ranks WHERE guild_id = ? AND name = 'Freak' LIMIT 1",
             (guild_id,)
         )
 
         await execute(
             "INSERT INTO users(guild_id, discord_id, current_rank_id, family_total, tuning_total, surname_changed) "
             "VALUES (?, ?, ?, 0, 0, 0)",
-            (guild_id, discord_id, freak["rank_id"] if freak else None),
+            (guild_id, discord_id, freak["id"] if freak else None),
         )
         u = await fetch_one(
             "SELECT * FROM users WHERE guild_id = ? AND discord_id = ?",
@@ -110,12 +110,12 @@ async def get_next_rank(guild_id: str, current_rank_id: int):
     """Получить следующий ранг для пользователя"""
     return await fetch_one(
         """
-        SELECT r2.rank_id, r2.name, r2.role_id, r2.order_num
+        SELECT r2.id AS rank_id, r2.name, r2.role_id, r2.sort_order
         FROM ranks r1
         JOIN ranks r2
-          ON r2.guild_id = r1.guild_id AND r2.order_num > r1.order_num
-        WHERE r1.guild_id = ? AND r1.rank_id = ?
-        ORDER BY r2.order_num ASC
+          ON r2.guild_id = r1.guild_id AND r2.sort_order > r1.sort_order
+        WHERE r1.guild_id = ? AND r1.id = ?
+        ORDER BY r2.sort_order ASC
         LIMIT 1
         """,
         (guild_id, current_rank_id),
@@ -126,17 +126,16 @@ async def get_main_req(guild_id: str, rank_from: int, rank_to: int):
     """Получить требования основной системы повышения"""
     return await fetch_one(
         "SELECT family_contracts FROM rank_requirements_main "
-        "WHERE guild_id = ? AND rank_from = ? AND rank_to = ?",
-        (guild_id, rank_from, rank_to),
+        "WHERE rank_from = ? AND rank_to = ?",
+        (rank_from, rank_to),
     )
 
 
 async def get_alt_req(guild_id: str, rank_from: int, rank_to: int):
     """Получить требования альтернативной системы повышения"""
     return await fetch_one(
-        "SELECT family_contracts, tuning_contracts, require_surname_change "
-        "FROM rank_requirements_alt WHERE guild_id = ? AND rank_from = ? AND rank_to = ?",
-        (guild_id, rank_from, rank_to),
+        "SELECT family_contracts, tuning_contracts, require_surname_change FROM rank_requirements_alt WHERE rank_from = ? AND rank_to = ?",
+        (rank_from, rank_to),
     )
 
 
@@ -144,7 +143,7 @@ async def promotion_status(discord_id: str, guild_id: str, system_type: str):
     """Проверить статус возможности повышения"""
     u = await ensure_user(discord_id, guild_id)
     cur_rank = await fetch_one(
-        "SELECT * FROM ranks WHERE guild_id = ? AND rank_id = ?",
+        "SELECT * FROM ranks WHERE guild_id = ? AND id = ?",
         (guild_id, u["current_rank_id"])
     )
     nxt = await get_next_rank(guild_id, u["current_rank_id"])
