@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import GuildSwitcher from '@/components/GuildSwitcher';
+import ThemeToggle from '@/components/ThemeToggle';
 import {
   LayoutDashboard,
   FileText,
@@ -128,6 +129,7 @@ export default function AdminLayout({ children }: Props) {
               <h2 className="text-xl font-bold">Admin Panel</h2>
             </div>
             <GuildSwitcher />
+            <ThemeToggle />
           </div>
         </header>
 

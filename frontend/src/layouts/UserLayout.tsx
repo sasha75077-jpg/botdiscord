@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import GuildSwitcher from '@/components/GuildSwitcher';
+import ThemeToggle from '@/components/ThemeToggle';
 import {
   LayoutDashboard,
   FileText,
@@ -119,6 +120,7 @@ export default function UserLayout({ children }: Props) {
               <h2 className="text-xl font-bold">User Panel</h2>
             </div>
             <GuildSwitcher />
+            <ThemeToggle />
           </div>
         </header>
 

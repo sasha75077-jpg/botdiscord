@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import ThemeToggle from '@/components/ThemeToggle';
 import {
   LayoutDashboard,
   Server,
@@ -120,6 +121,7 @@ export default function OwnerLayout({ children }: Props) {
             <div className="flex-1 lg:flex-none">
               <h2 className="text-xl font-bold">Owner Panel</h2>
             </div>
+            <ThemeToggle />
           </div>
         </header>
 
