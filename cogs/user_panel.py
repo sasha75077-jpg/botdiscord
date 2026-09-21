@@ -795,7 +795,7 @@ class MainPanelView(View):
     
         week_start, week_end = week_range_msk()
     
-        res = await create_bonus_report_for_week(uid, week_start, week_end)
+        res = await create_bonus_report_for_week(uid, str(interaction.guild.id), week_start, week_end)
     
         if not res.get("ok"):
             embed = await build_profile_embed(uid)

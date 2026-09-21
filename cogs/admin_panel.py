@@ -237,26 +237,26 @@ async def count_admins_online(guild: discord.Guild) -> tuple[int, int]:
 
 
 
-async def count_pending_contracts() -> int:
+async def count_pending_contracts(guild_id: str | None = None) -> int:
     row = await fetch_one(
-        "SELECT COUNT(*) AS cnt FROM contracts WHERE confirm_status = 'PENDING'",
-        ()
+        "SELECT COUNT(*) AS cnt FROM contracts WHERE confirm_status = 'PENDING' AND (? IS NULL OR guild_id = ?)",
+        (guild_id, guild_id)
     )
     return int(row["cnt"] or 0) if row else 0
 
 
-async def count_pending_promos() -> int:
+async def count_pending_promos(guild_id: str | None = None) -> int:
     row = await fetch_one(
-        "SELECT COUNT(*) AS cnt FROM promotion_reports WHERE status IN ('NEW','TAKEN')",
-        ()
+        "SELECT COUNT(*) AS cnt FROM promotion_reports WHERE status IN ('NEW','TAKEN') AND (? IS NULL OR guild_id = ? OR guild_id IS NULL)",
+        (guild_id, guild_id)
     )
     return int(row["cnt"] or 0) if row else 0
 
 
-async def count_pending_bonus() -> int:
+async def count_pending_bonus(guild_id: str | None = None) -> int:
     row = await fetch_one(
-        "SELECT COUNT(*) AS cnt FROM bonus_reports WHERE status IN ('NEW','TAKEN')",
-        ()
+        "SELECT COUNT(*) AS cnt FROM bonus_reports WHERE status IN ('NEW','TAKEN') AND (? IS NULL OR guild_id = ?)",
+        (guild_id, guild_id)
     )
     return int(row["cnt"] or 0) if row else 0
 
@@ -264,9 +264,10 @@ async def count_pending_bonus() -> int:
 
 
 async def build_admin_hub_embed(guild: discord.Guild) -> discord.Embed:
-    c1 = await count_pending_contracts()
-    c2 = await count_pending_promos()
-    c3 = await count_pending_bonus()
+    gid = str(guild.id)
+    c1 = await count_pending_contracts(gid)
+    c2 = await count_pending_promos(gid)
+    c3 = await count_pending_bonus(gid)
 
     admins_total, admins_online = await count_admins_online(guild)
 
@@ -294,8 +295,8 @@ async def build_admin_hub_embed(guild: discord.Guild) -> discord.Embed:
 
 async def preview_sync_all_ranks(guild: discord.Guild, sample_limit: int = 5) -> dict:
     rank_rows = await fetch_all(
-        "SELECT id, role_id, COALESCE(sort_order, 0) AS sort_order FROM ranks WHERE role_id IS NOT NULL",
-        ()
+        "SELECT id, role_id, COALESCE(sort_order, 0) AS sort_order FROM ranks WHERE role_id IS NOT NULL AND guild_id = ?",
+        (str(guild.id),)
     )
     role_to_rank = {int(r["role_id"]): (int(r["id"]), int(r["sort_order"])) for r in rank_rows}
 
@@ -328,8 +329,8 @@ async def preview_sync_all_ranks(guild: discord.Guild, sample_limit: int = 5) ->
 
 async def sync_all_ranks_db_only(guild: discord.Guild) -> dict:
     rank_rows = await fetch_all(
-        "SELECT id, role_id, COALESCE(sort_order, 0) AS sort_order FROM ranks WHERE role_id IS NOT NULL",
-        ()
+        "SELECT id, role_id, COALESCE(sort_order, 0) AS sort_order FROM ranks WHERE role_id IS NOT NULL AND guild_id = ?",
+        (str(guild.id),)
     )
     role_to_rank = {int(r["role_id"]): (int(r["id"]), int(r["sort_order"])) for r in rank_rows}
 
@@ -897,7 +898,7 @@ class SetRoleIdModal(discord.ui.Modal):
 
 # ====== RANKS HELPERS ======
 
-async def fetch_rank_requirements_rows():
+async def fetch_rank_requirements_rows(guild_id: str | None = None):
     return await fetch_all(
         """
         SELECT
@@ -920,42 +921,44 @@ async def fetch_rank_requirements_rows():
 
         LEFT JOIN rank_requirements_alt ra ON ra.rank_from = r1.id
         LEFT JOIN ranks r2a ON r2a.id = ra.rank_to
-
+        WHERE (? IS NULL OR r1.guild_id = ?)
         ORDER BY r1.sort_order ASC
         """,
-        ()
+        (guild_id, guild_id)
     )
 
 
-async def get_user_approved_contracts_cnt(discord_id: int) -> int:
+async def get_user_approved_contracts_cnt(discord_id: int, guild_id: str | None = None) -> int:
     row = await fetch_one(
-        "SELECT COUNT(*) AS cnt FROM contracts WHERE discord_id = ? AND confirm_status='APPROVED'",
-        (str(discord_id),)  # contracts.discord_id = TEXT
+        "SELECT COUNT(*) AS cnt FROM contracts WHERE discord_id = ? AND confirm_status='APPROVED' AND (? IS NULL OR guild_id = ?)",
+        (str(discord_id), guild_id, guild_id)  # contracts.discord_id = TEXT
     )
     return int(row["cnt"] or 0)
 
 
-async def pick_rank_for_cnt(cnt: int):
+async def pick_rank_for_cnt(cnt: int, guild_id: str | None = None):
     return await fetch_one(
         """
         SELECT id, name, role_id, min_contracts, sort_order
         FROM ranks
-        WHERE min_contracts <= ?
+        WHERE min_contracts <= ? AND (? IS NULL OR guild_id = ?)
         ORDER BY min_contracts DESC, sort_order DESC
         LIMIT 1
         """,
-        (cnt,)
+        (cnt, guild_id, guild_id)
     )
 
 
-async def get_all_rank_role_ids() -> list[int]:
-    rows = await fetch_all("SELECT role_id FROM ranks", ())
+async def get_all_rank_role_ids(guild_id: str | None = None) -> list[int]:
+    rows = await fetch_all(
+        "SELECT role_id FROM ranks WHERE (? IS NULL OR guild_id = ?)", (guild_id, guild_id))
     return [int(r["role_id"]) for r in rows]
 
 
 async def apply_rank_to_member(guild: discord.Guild, member: discord.Member) -> dict:
-    cnt = await get_user_approved_contracts_cnt(member.id)
-    rank = await pick_rank_for_cnt(cnt)
+    gid = str(guild.id)
+    cnt = await get_user_approved_contracts_cnt(member.id, gid)
+    rank = await pick_rank_for_cnt(cnt, gid)
     if not rank:
         return {"ok": False, "reason": "no_ranks_in_db", "cnt": cnt}
 
@@ -963,7 +966,7 @@ async def apply_rank_to_member(guild: discord.Guild, member: discord.Member) -> 
     if not target_role:
         return {"ok": False, "reason": "role_not_found", "rank": dict(rank), "cnt": cnt}
 
-    all_rank_role_ids = set(await get_all_rank_role_ids())
+    all_rank_role_ids = set(await get_all_rank_role_ids(gid))
     to_remove = [r for r in member.roles if r.id in all_rank_role_ids and r.id != target_role.id]
 
     try:
@@ -977,10 +980,10 @@ async def apply_rank_to_member(guild: discord.Guild, member: discord.Member) -> 
     return {"ok": True, "rank": dict(rank), "cnt": cnt}
 
 
-async def fetch_ranks():
+async def fetch_ranks(guild_id: str | None = None):
     return await fetch_all(
-        "SELECT id, name, role_id, min_contracts, sort_order FROM ranks ORDER BY min_contracts ASC, sort_order ASC",
-        ()
+        "SELECT id, name, role_id, min_contracts, sort_order FROM ranks WHERE (? IS NULL OR guild_id = ?) ORDER BY min_contracts ASC, sort_order ASC",
+        (guild_id, guild_id)
     )
 
 async def update_promo_report_message(client: discord.Client, report_id: int):
@@ -1089,7 +1092,8 @@ class RankLinearRequirementsModal(discord.ui.Modal, title="Требования 
         alt_t = int(self.alt_tuning.value.strip())
 
         # 1) найти rank_from и его sort_order
-        r1 = await fetch_one("SELECT id, sort_order FROM ranks WHERE name=? LIMIT 1", (name,))
+        _gid = str(interaction.guild.id) if interaction.guild else None
+        r1 = await fetch_one("SELECT id, sort_order FROM ranks WHERE name=? AND (? IS NULL OR guild_id = ?) LIMIT 1", (name, _gid, _gid))
         if not r1:
             return await interaction.response.send_message(f"❌ Ранг '{name}' не найден.", ephemeral=True)
 
@@ -1097,7 +1101,7 @@ class RankLinearRequirementsModal(discord.ui.Modal, title="Требования 
         so = int(r1["sort_order"] or 0)
 
         # 2) найти следующий ранг по sort_order
-        r2 = await fetch_one("SELECT id, name FROM ranks WHERE sort_order=? LIMIT 1", (so + 1,))
+        r2 = await fetch_one("SELECT id, name FROM ranks WHERE sort_order=? AND (? IS NULL OR guild_id = ?) LIMIT 1", (so + 1, _gid, _gid))
         if not r2:
             return await interaction.response.send_message(
                 f"❌ Для ранга '{name}' не найден следующий (sort_order={so+1}).",
@@ -1145,8 +1149,8 @@ class RankAddModal(discord.ui.Modal, title="Добавить ранг"):
         so = int(so_raw) if so_raw.lstrip("-").isdigit() else 0
 
         await execute(
-            "INSERT INTO ranks(name, role_id, min_contracts, sort_order) VALUES(?, ?, 0, ?)",
-            (n, role_id, so)
+            "INSERT INTO ranks(name, role_id, min_contracts, sort_order, guild_id) VALUES(?, ?, 0, ?, ?)",
+            (n, role_id, so, str(interaction.guild.id) if interaction.guild else None)
         )
       
         await interaction.response.send_message("✅ Ранг добавлен.", ephemeral=True)
@@ -1256,7 +1260,8 @@ class RankReqNumbersModal(discord.ui.Modal, title="Требования повы
             rt = int(rt)
         else:
             so = int(self.req_row.get("sort_order") or 0)
-            nxt = await fetch_one("SELECT id FROM ranks WHERE sort_order=? LIMIT 1", (so + 1,))
+            _gid2 = str(interaction.guild.id) if interaction.guild else None
+            nxt = await fetch_one("SELECT id FROM ranks WHERE sort_order=? AND (? IS NULL OR guild_id = ?) LIMIT 1", (so + 1, _gid2, _gid2))
             if not nxt:
                 return await interaction.response.send_message("❌ Не найден следующий ранг (sort_order+1).", ephemeral=True)
             rt = int(nxt["id"])
@@ -1338,8 +1343,11 @@ class RankSelect(discord.ui.Select):
             return
 
         if self.action == "delete":
+            _todel = await fetch_one("SELECT guild_id FROM ranks WHERE id = ?", (int(row["id"]),))
+            if interaction.guild and _todel and _todel.get("guild_id") and str(_todel["guild_id"]) != str(interaction.guild.id):
+                return await interaction.response.send_message("❌ Этот ранг с другого сервера.", ephemeral=True)
             await execute("DELETE FROM ranks WHERE id = ?", (int(row["id"]),))
-            rows = await fetch_ranks()
+            rows = await fetch_ranks(str(interaction.guild.id) if interaction.guild else None)
             await interaction.response.edit_message(embed=ranks_embed(rows), view=RanksView())
             return
         
@@ -1351,7 +1359,7 @@ class RanksView(discord.ui.View):
 
     @discord.ui.button(label="🔄 Обновить", style=discord.ButtonStyle.secondary)
     async def refreshbtn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        rows = await fetch_ranks()
+        rows = await fetch_ranks(str(interaction.guild.id) if interaction.guild else None)
         await interaction.response.edit_message(embed=ranks_embed(rows), view=RanksView())
 
     @discord.ui.button(label="➕ Добавить", style=discord.ButtonStyle.success)
@@ -1360,17 +1368,17 @@ class RanksView(discord.ui.View):
 
     @discord.ui.button(label="📈 Требования", style=discord.ButtonStyle.primary)
     async def reqbtn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        rows = await fetch_rank_requirements_rows()
+        rows = await fetch_rank_requirements_rows(str(interaction.guild.id) if interaction.guild else None)
         if not rows:
             return await interaction.response.send_message("Ранги пустые.", ephemeral=True)
     
         v = discord.ui.View(timeout=300)
         v.add_item(RankReqSelect(rows))
-        await interaction.response.edit_message(embed=ranks_embed(await fetch_ranks()), view=v)
+        await interaction.response.edit_message(embed=ranks_embed(await fetch_ranks(str(interaction.guild.id) if interaction.guild else None)), view=v)
 
     @discord.ui.button(label="✏️ Изменить", style=discord.ButtonStyle.primary)
     async def editbtn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        rows = await fetch_ranks()
+        rows = await fetch_ranks(str(interaction.guild.id) if interaction.guild else None)
         if not rows:
             await interaction.response.send_message("Ранги пустые.", ephemeral=True)
             return
@@ -1380,7 +1388,7 @@ class RanksView(discord.ui.View):
 
     @discord.ui.button(label="🗑 Удалить", style=discord.ButtonStyle.danger)
     async def delbtn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        rows = await fetch_ranks()
+        rows = await fetch_ranks(str(interaction.guild.id) if interaction.guild else None)
         if not rows:
             await interaction.response.send_message("Ранги пустые.", ephemeral=True)
             return
@@ -1390,7 +1398,7 @@ class RanksView(discord.ui.View):
 
     @discord.ui.button(label="🔄 Ранг вручную", style=discord.ButtonStyle.primary)
     async def manualrankbtn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        rows = await fetch_ranks()  # у тебя уже есть helper [file:934]
+        rows = await fetch_ranks(str(interaction.guild.id) if interaction.guild else None)  # у тебя уже есть helper [file:934]
         v = ManualRankSetView(rows)
         await interaction.response.edit_message(embed=v.build_embed(), view=v)
 
@@ -2083,7 +2091,7 @@ class ManualRankSetView(discord.ui.View):
 
     @discord.ui.button(label="Назад", style=discord.ButtonStyle.secondary)
     async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
-        rows = await fetch_ranks()
+        rows = await fetch_ranks(str(interaction.guild.id) if interaction.guild else None)
         await interaction.response.edit_message(embed=ranks_embed(rows), view=RanksView())
 
 ADMIN_HUB_CH_KEY = "admin_hub_channel_id"
@@ -2381,18 +2389,22 @@ class AdminPanel(commands.Cog):
             week_start, week_end = prev_week_range_msk()
         else:
             week_start, week_end = week_range_msk()
-    
-        s = await fetch_one("SELECT value FROM settings WHERE key = 'bonus_channel_id'", ())
-        channel_id = int(s["value"]) if s and s["value"] else None
+
+        gid = str(interaction.guild.id) if interaction.guild else None
+        ch_val = (await get_setting("bonus_log_channel_id", gid)) or ""
+        if not ch_val:
+            brow = await fetch_one("SELECT value FROM settings WHERE key = 'bonus_channel_id'", ())
+            ch_val = ((brow or {}).get("value")) or ""
+        channel_id = int(ch_val) if str(ch_val).strip().isdigit() else None
         if not channel_id:
-            await interaction.response.send_message("❌ Не задан bonus_channel_id.", ephemeral=True)
+            await interaction.response.send_message("❌ Не задан канал премий.", ephemeral=True)
             return
-    
+
         channel = interaction.client.get_channel(channel_id)
         if not channel:
             await interaction.response.send_message("❌ Канал премий не найден.", ephemeral=True)
             return
-    
+
         candidates = await fetch_all(
             """
             SELECT discord_id
@@ -2404,6 +2416,13 @@ class AdminPanel(commands.Cog):
             """,
             (week_start, week_end)
         )
+        # v_contract_value без guild_id: оставляем только участников текущего сервера
+        if interaction.guild is not None:
+            try:
+                member_ids = {str(m.id) for m in interaction.guild.members}
+                candidates = [r for r in candidates if str(r["discord_id"]) in member_ids]
+            except Exception:
+                pass
     
         created = 0
         updated = 0
@@ -2418,7 +2437,7 @@ class AdminPanel(commands.Cog):
     
         for row in candidates:
             uid = row["discord_id"]
-            res = await create_bonus_report_for_week(uid, week_start, week_end)
+            res = await create_bonus_report_for_week(uid, gid, week_start, week_end)
     
             if not res.get("ok"):
                 reason = res.get("reason")
@@ -2574,9 +2593,10 @@ class AdminPanel(commands.Cog):
     @app_commands.guilds(*GUILD_OBJECTS)
     @admin_roles_check(get_setting)
     async def ranks_list(self, interaction: discord.Interaction):
+        _gid = str(interaction.guild.id) if interaction.guild else None
         rows = await fetch_all(
-            "SELECT id, name, role_id, min_contracts, sort_order FROM ranks ORDER BY min_contracts ASC, sort_order ASC",
-            ()
+            "SELECT id, name, role_id, min_contracts, sort_order FROM ranks WHERE (? IS NULL OR guild_id = ?) ORDER BY min_contracts ASC, sort_order ASC",
+            (_gid, _gid)
         )
         if not rows:
             await interaction.response.send_message("Ранги пустые.", ephemeral=True)
@@ -2598,8 +2618,9 @@ class AdminPanel(commands.Cog):
             return
     
         await execute(
-            "INSERT INTO ranks(name, role_id, min_contracts, sort_order) VALUES(?, ?, ?, ?)",
-            (name, int(role.id), int(min_contracts), int(sort_order))
+            "INSERT INTO ranks(name, role_id, min_contracts, sort_order, guild_id) VALUES(?, ?, ?, ?, ?)",
+            (name, int(role.id), int(min_contracts), int(sort_order),
+             str(interaction.guild.id) if interaction.guild else None)
         )
         await interaction.response.send_message(f"✅ Ранг добавлен: {name} -> {role.mention}", ephemeral=True)
         
@@ -2607,6 +2628,9 @@ class AdminPanel(commands.Cog):
     @app_commands.guilds(*GUILD_OBJECTS)
     @app_commands.checks.has_permissions(administrator=True)
     async def rank_del(self, interaction: discord.Interaction, rank_id: int):
+        _todel = await fetch_one("SELECT guild_id FROM ranks WHERE id = ?", (int(rank_id),))
+        if interaction.guild and _todel and _todel.get("guild_id") and str(_todel["guild_id"]) != str(interaction.guild.id):
+            return await interaction.response.send_message("❌ Этот ранг с другого сервера.", ephemeral=True)
         await execute("DELETE FROM ranks WHERE id = ?", (int(rank_id),))
         await interaction.response.send_message(f"✅ Удалено: rank_id={rank_id}", ephemeral=True)
         
@@ -2907,7 +2931,7 @@ class AdminSettingsView(discord.ui.View):
 
     @discord.ui.button(label="🏷️ Ранги", style=discord.ButtonStyle.secondary)
     async def btn_ranks(self, interaction: discord.Interaction, button: discord.ui.Button):
-        rows = await fetch_ranks()
+        rows = await fetch_ranks(str(interaction.guild.id) if interaction.guild else None)
         await interaction.response.edit_message(embed=ranks_embed(rows), view=RanksView())
 
     @discord.ui.button(label="💲 Цены", style=discord.ButtonStyle.secondary)
@@ -4421,6 +4445,9 @@ async def approve_bonus(interaction: discord.Interaction, report_id: int):
     r = await fetch_one("SELECT * FROM bonus_reports WHERE report_id = ?", (report_id,))
     if not r:
         await interaction.response.send_message("❌ Отчёт не найден.", ephemeral=True)
+        return
+    if interaction.guild and r.get("guild_id") and str(r["guild_id"]) != str(interaction.guild.id):
+        await interaction.response.send_message("❌ Этот отчет с другого сервера.", ephemeral=True)
         return
     if interaction.guild and r.get("guild_id") and str(r["guild_id"]) != str(interaction.guild.id):
         await interaction.response.send_message("❌ Этот отчет с другого сервера.", ephemeral=True)

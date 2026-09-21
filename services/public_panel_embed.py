@@ -12,7 +12,9 @@ async def build_public_panel_embed(guild: discord.Guild) -> discord.Embed:
     online_statuses = {discord.Status.online, discord.Status.idle, discord.Status.dnd}
     online = sum(1 for m in members if m.status in online_statuses)
 
-    row = await fetch_one("SELECT COUNT(*) AS cnt FROM contracts WHERE confirm_status='PENDING'", ())
+    row = await fetch_one(
+        "SELECT COUNT(*) AS cnt FROM contracts WHERE confirm_status='PENDING' AND (? IS NULL OR guild_id = ?)",
+        (str(guild.id), str(guild.id)))
     pending = int(row["cnt"] or 0)
 
     embed = discord.Embed(
