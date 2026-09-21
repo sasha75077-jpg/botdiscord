@@ -48,7 +48,7 @@ class RoleSync(commands.Cog):
     async def _before_reconcile(self):
         await self.bot.wait_until_ready()
 
-    @tasks.loop(seconds=60)
+    @tasks.loop(seconds=30)
     async def contracts_poll_loop(self):
         try:
             await rs.poll_site_contracts(self.bot)
