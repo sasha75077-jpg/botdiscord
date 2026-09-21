@@ -18,7 +18,9 @@ from discord import app_commands
 from discord.ext import commands
 from discord.ui import View, Button, Modal, TextInput
 
-from config import GUILD_ID
+from config import GUILD_ID, GUILD_IDS_LIST
+
+GUILD_OBJECTS = [discord.Object(id=g) for g in GUILD_IDS_LIST] or [discord.Object(id=GUILD_ID)]
 from database import fetch_all, execute, fetch_one, get_setting, set_setting
 
 from utils.week import week_range_msk, prev_week_range_msk
@@ -2085,7 +2087,7 @@ class AdminPanel(commands.Cog):
 
 
     @app_commands.command(name="admin", description="Открыть админ-панель")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @admin_roles_check(get_setting)
     async def admin_panel(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -2095,7 +2097,7 @@ class AdminPanel(commands.Cog):
         await interaction.edit_original_response(embed=embed, view=view, content=None)
 
     @app_commands.command(name="admin_hub", description="Создать сообщение админ-панели в канале")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @admin_roles_check(get_setting)
     async def admin_hub(self, interaction: discord.Interaction, channel: discord.TextChannel):
         await interaction.response.defer(ephemeral=True)
@@ -2115,7 +2117,7 @@ class AdminPanel(commands.Cog):
 
 
     @app_commands.command(name="profile_panel", description="Создать/обновить общую панель профиля")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @admin_roles_check(get_setting)
     async def profile_panel(self, interaction: discord.Interaction, channel: discord.TextChannel | None = None):
         await interaction.response.defer(ephemeral=True)
@@ -2143,7 +2145,7 @@ class AdminPanel(commands.Cog):
         await interaction.edit_original_response(content="Панель создана и сохранена.")
 
     @app_commands.command(name="prices_ui", description="Интерактивные цены по категориям")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @admin_roles_check(get_setting)
     async def prices_ui(self, interaction: discord.Interaction):
         view = PricesCategoriesView()
@@ -2152,7 +2154,7 @@ class AdminPanel(commands.Cog):
         view.message = await interaction.original_response()
     
     @app_commands.command(name="post_prices", description="Опубликовать прайс-эмбед в этот канал")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @admin_roles_check(get_setting)
     async def post_prices(self, interaction: discord.Interaction):
         from services.prices_panel import ensure_panel, CH_KEY
@@ -2167,7 +2169,7 @@ class AdminPanel(commands.Cog):
     
 
     @app_commands.command(name="refresh_prices", description="Обновить ранее опубликованный прайс-эмбед")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @admin_roles_check(get_setting)
     async def refresh_prices(self, interaction: discord.Interaction):
         from services.prices_panel import ensure_panel
@@ -2179,7 +2181,7 @@ class AdminPanel(commands.Cog):
 
 
     @app_commands.command(name="set_price", description="Установить цену: item_key -> price")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @app_commands.checks.has_permissions(administrator=True)
     async def set_price(self, interaction: discord.Interaction, item_key: str, price: float):
         item_key = item_key.strip()
@@ -2197,7 +2199,7 @@ class AdminPanel(commands.Cog):
         await interaction.response.send_message(f"✅ Цена установлена: `{item_key}` = **{price}**", ephemeral=True)
 
     @app_commands.command(name="prices", description="Показать все цены")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @admin_roles_check(get_setting)
     async def prices(self, interaction: discord.Interaction):
         rows = await fetch_all("SELECT item_key, price FROM prices ORDER BY item_key ASC", ())
@@ -2220,7 +2222,7 @@ class AdminPanel(commands.Cog):
 
 
     @app_commands.command(name="promo_submit", description="Подать отчёт на повышение (main/alt)")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     async def promo_submit(self, interaction: discord.Interaction, system: str):
         system = (system or "").lower().strip()
         if system not in ("main", "alt"):
@@ -2245,7 +2247,7 @@ class AdminPanel(commands.Cog):
         await interaction.followup.send(f"✅ Репорт создан #{report_id} и отправлен в канал.", ephemeral=True)
 
     @app_commands.command(name="set_log_contracts", description="Канал логов контрактов")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @app_commands.checks.has_permissions(administrator=True)
     async def set_log_contracts(self, interaction: discord.Interaction, channel: discord.TextChannel):
         await interaction.response.defer(ephemeral=True)
@@ -2253,7 +2255,7 @@ class AdminPanel(commands.Cog):
         await interaction.followup.send(f"✅ Логи контрактов: {channel.mention}", ephemeral=True)
     
     @app_commands.command(name="set_log_bonus", description="Канал логов бонусов")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @app_commands.checks.has_permissions(administrator=True)
     async def set_log_bonus(self, interaction: discord.Interaction, channel: discord.TextChannel):
         await interaction.response.defer(ephemeral=True)
@@ -2261,7 +2263,7 @@ class AdminPanel(commands.Cog):
         await interaction.followup.send(f"✅ Логи бонусов: {channel.mention}", ephemeral=True)
     
     @app_commands.command(name="set_log_promo", description="Канал логов промо")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @app_commands.checks.has_permissions(administrator=True)
     async def set_log_promo(self, interaction: discord.Interaction, channel: discord.TextChannel):
         await interaction.response.defer(ephemeral=True)
@@ -2270,7 +2272,7 @@ class AdminPanel(commands.Cog):
     
 
     @app_commands.command(name="bonus_export", description="Экспорт одобренных премий за неделю (TXT)")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @app_commands.choices(week=[
         app_commands.Choice(name="Текущая неделя", value="current"),
         app_commands.Choice(name="Прошлая неделя", value="previous")
@@ -2355,7 +2357,7 @@ class AdminPanel(commands.Cog):
 
 
     @app_commands.command(name="bonus_generate", description="Сформировать премии за неделю (для всех)")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @admin_roles_check(get_setting)
     async def bonus_generate(self, interaction: discord.Interaction, week: Literal["current", "previous"] = "current"):
         if week == "previous":
@@ -2447,7 +2449,7 @@ class AdminPanel(commands.Cog):
 
 
     @app_commands.command(name="bonus_delete", description="Удалить отчёт премии по report_id")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @admin_roles_check(get_setting)
     async def bonus_delete(self, interaction: discord.Interaction, report_id: int):
         res = await delete_bonus_report(report_id)
@@ -2457,7 +2459,7 @@ class AdminPanel(commands.Cog):
         await interaction.response.send_message(f"✅ Отчёт премии #{report_id} удалён.", ephemeral=True)
 
     @app_commands.command(name="pending_now", description="Обновить счётчик PENDING сейчас")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @admin_roles_check(get_setting)
     async def pending_now(self, interaction: discord.Interaction):
         row = await fetch_one(
@@ -2472,7 +2474,7 @@ class AdminPanel(commands.Cog):
         await interaction.response.send_message("✅ Счётчик обновлён.", ephemeral=True)
 
     @app_commands.command(name="set_pending_channel", description="Задать канал для счётчика PENDING")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @app_commands.checks.has_permissions(administrator=True)
     async def set_pending_channel(self, interaction: discord.Interaction, channel: discord.TextChannel):
         await set_setting("pending_channel_id", str(channel.id))
@@ -2480,14 +2482,14 @@ class AdminPanel(commands.Cog):
         await interaction.response.send_message(f"✅ Канал счётчика: {channel.mention}", ephemeral=True)
 
     @app_commands.command(name="set_pending_role", description="Задать роль для пинга PENDING (если нужно)")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @app_commands.checks.has_permissions(administrator=True)
     async def set_pending_role(self, interaction: discord.Interaction, role: discord.Role):
         await set_setting("pending_ping_role_id", str(role.id))
         await interaction.response.send_message(f"✅ Роль пинга: {role.mention}", ephemeral=True)
 
     @app_commands.command(name="pending_settings", description="Показать настройки PENDING")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @admin_roles_check(get_setting)
     async def pending_settings(self, interaction: discord.Interaction):
         ch = await get_setting("pending_channel_id")
@@ -2498,14 +2500,14 @@ class AdminPanel(commands.Cog):
         )
 
     @app_commands.command(name="clear_pending_role", description="Выключить роль пинга для PENDING")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @app_commands.checks.has_permissions(administrator=True)
     async def clear_pending_role(self, interaction: discord.Interaction):
         await execute("DELETE FROM settings WHERE key = ?", ("pending_ping_role_id",))
         await interaction.response.send_message("✅ Роль пинга отключена.", ephemeral=True)
 
     @app_commands.command(name="set_audit_channel", description="Установить канал логов")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @app_commands.checks.has_permissions(administrator=True)
     async def set_audit_channel(self, interaction: discord.Interaction, channel: discord.TextChannel):
         await interaction.response.defer(ephemeral=True)
@@ -2513,7 +2515,7 @@ class AdminPanel(commands.Cog):
         await interaction.followup.send(f"✅ Канал логов: {channel.mention}", ephemeral=True)
 
     @app_commands.command(name="sync", description="Синхронизировать slash-команды (owner)")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     async def sync_slash(self, interaction: discord.Interaction):
         if interaction.user.id != 335065897398042626 :
             await interaction.response.send_message("Нет прав.", ephemeral=True)
@@ -2525,7 +2527,7 @@ class AdminPanel(commands.Cog):
         await interaction.followup.send(f"✅ Synced: {len(synced)}", ephemeral=True)
         
     @app_commands.command(name="admin_roles", description="Показать разрешённые админ-роли")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @admin_roles_check(get_setting)
     async def admin_roles(self, interaction: discord.Interaction):
         raw = await get_setting("admin_role_ids")
@@ -2552,7 +2554,7 @@ class AdminPanel(commands.Cog):
         
         
     @app_commands.command(name="ranks", description="Показать ранги")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @admin_roles_check(get_setting)
     async def ranks_list(self, interaction: discord.Interaction):
         rows = await fetch_all(
@@ -2567,7 +2569,7 @@ class AdminPanel(commands.Cog):
         await interaction.response.send_message("```" + "\n".join(lines) + "```", ephemeral=True)
 
     @app_commands.command(name="rank_add", description="Добавить ранг")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @app_commands.checks.has_permissions(administrator=True)
     async def rank_add(self, interaction: discord.Interaction, name: str, role: discord.Role, min_contracts: int, sort_order: int = 0):
         name = name.strip()
@@ -2585,14 +2587,14 @@ class AdminPanel(commands.Cog):
         await interaction.response.send_message(f"✅ Ранг добавлен: {name} -> {role.mention}", ephemeral=True)
         
     @app_commands.command(name="rank_del", description="Удалить ранг по id")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @app_commands.checks.has_permissions(administrator=True)
     async def rank_del(self, interaction: discord.Interaction, rank_id: int):
         await execute("DELETE FROM ranks WHERE id = ?", (int(rank_id),))
         await interaction.response.send_message(f"✅ Удалено: rank_id={rank_id}", ephemeral=True)
         
     @app_commands.command(name="rank_apply", description="Применить ранг пользователю (по контрактам)")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @app_commands.checks.has_permissions(administrator=True)
     async def rank_apply(self, interaction: discord.Interaction, member: discord.Member):
         await interaction.response.defer(ephemeral=True)
@@ -2605,7 +2607,7 @@ class AdminPanel(commands.Cog):
 
 
     @app_commands.command(name="rank_apply_all", description="Применить ранги всем участникам (долго)")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @app_commands.checks.has_permissions(administrator=True)
     async def rank_apply_all(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -2624,7 +2626,7 @@ class AdminPanel(commands.Cog):
         await interaction.followup.send(f"✅ Готово. OK={ok}, FAIL={fail}", ephemeral=True)
         
     @app_commands.command(name="setstatic", description="Установить статик пользователю")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     @admin_roles_check(get_setting)  # или твой декоратор
     async def setstatic(self, interaction: discord.Interaction, user: discord.Member, static: str):
         st = (static or "").strip()

@@ -7,7 +7,9 @@ from utils.week import week_range_msk
 from database import get_setting
 from services.profile_panel import open_profile_panel
 
-from config import GUILD_ID
+from config import GUILD_ID, GUILD_IDS_LIST
+
+GUILD_OBJECTS = [discord.Object(id=g) for g in GUILD_IDS_LIST] or [discord.Object(id=GUILD_ID)]
 from database import fetch_one, execute, fetch_all
 
 from utils.week import week_range_msk
@@ -672,7 +674,7 @@ class UserPanel(commands.Cog):
         self.bot = bot
 
     @app_commands.command(name="profile", description="Открыть мейн панель")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     async def profile(self, interaction: discord.Interaction):
         await open_profile_panel(interaction)
 
@@ -707,7 +709,7 @@ class UserPanel(commands.Cog):
         await interaction.edit_original_response(embed=embed, view=MainPanelView(), content=None)
 
     @app_commands.command(name="set_static", description="Указать static для премий (один раз)")
-    @app_commands.guilds(discord.Object(id=GUILD_ID))
+    @app_commands.guilds(*GUILD_OBJECTS)
     async def set_static(self, interaction: discord.Interaction, static: str):
         static = static.strip()
         if len(static) < 3 or len(static) > 64:

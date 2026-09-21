@@ -74,6 +74,8 @@ class MyBot(commands.Bot):
             for guild_id in GUILD_IDS_LIST:
                 guild = discord.Object(id=guild_id)
                 try:
+                    # Глобальные команды (/заявка и др.) тоже копируем на серверы
+                    self.tree.copy_global_to(guild=guild)
                     synced = await self.tree.sync(guild=guild)
                     print(f"[SYNCED] {len(synced)} commands to guild {guild_id}")
                 except Exception as e:
