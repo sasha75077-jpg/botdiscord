@@ -3037,12 +3037,15 @@ class SetTextSettingModal(discord.ui.Modal):
 
 
 async def show_pending_contracts(interaction: discord.Interaction, page: int = 0):
+    gid = str(interaction.guild.id) if interaction.guild else None
     contracts = await fetch_all(
-        "SELECT * FROM contracts WHERE confirm_status = 'PENDING' ORDER BY ts DESC LIMIT 10 OFFSET ?",
-        (page * 10,)
+        "SELECT * FROM contracts WHERE confirm_status = 'PENDING' AND (? IS NULL OR guild_id = ?) ORDER BY ts DESC LIMIT 10 OFFSET ?",
+        (gid, gid, page * 10)
     )
 
-    total = await fetch_one("SELECT COUNT(*) as cnt FROM contracts WHERE confirm_status = 'PENDING'")
+    total = await fetch_one(
+        "SELECT COUNT(*) as cnt FROM contracts WHERE confirm_status = 'PENDING' AND (? IS NULL OR guild_id = ?)",
+        (gid, gid))
     total_count = int(total["cnt"] or 0) if total else 0
 
     embed = discord.Embed(title="📋 Подтверждение контрактов", color=0x00FF00)
@@ -3332,6 +3335,37 @@ PROMO_EXCLUDED_TYPES = {
     "агитации wn",
 }
 
+async def mark_contract_upload_message(client, contract, accepted: bool):
+    """Проставить статус на сообщении подачи (embed + снять кнопки)."""
+    try:
+        import json as _json
+        details = contract.get("details")
+        if isinstance(details, str):
+            details = _json.loads(details)
+        up = (details or {}).get("upload") or {}
+        ch_id, msg_id = up.get("channel_id"), up.get("message_id")
+        if not ch_id or not msg_id:
+            return False
+        ch = client.get_channel(int(ch_id))
+        if ch is None:
+            try:
+                ch = await client.fetch_channel(int(ch_id))
+            except Exception:
+                return False
+        try:
+            msg = await ch.fetch_message(int(msg_id))
+        except Exception:
+            return False
+        emb = msg.embeds[0] if msg.embeds else discord.Embed(title=f"Контракт #{contract.get('id')}")
+        emb.color = 0x2ECC71 if accepted else 0xE74C3C
+        emb.add_field(name="Статус", value="✅ Принят" if accepted else "❌ Отклонен", inline=False)
+        await msg.edit(embed=emb, view=None)
+        return True
+    except Exception as e:
+        print(f"[contract-mark] warn: {e}")
+        return False
+
+
 async def approve_contract(interaction: discord.Interaction, contract_id: int):
     contract = await fetch_one("SELECT * FROM contracts WHERE id = ?", (contract_id,))
     if not contract or contract["confirm_status"] != "PENDING":
@@ -3339,6 +3373,13 @@ async def approve_contract(interaction: discord.Interaction, contract_id: int):
             await interaction.message.edit(content="❌ Контракт уже обработан или не найден", embed=None, view=None)
         else:
             await interaction.response.send_message("❌ Контракт уже обработан или не найден", ephemeral=True)
+        return
+    if interaction.guild and contract.get("guild_id") and str(contract["guild_id"]) != str(interaction.guild.id):
+        msg = "❌ Этот контракт с другого сервера."
+        if interaction.response.is_done():
+            await interaction.followup.send(msg, ephemeral=True)
+        else:
+            await interaction.response.send_message(msg, ephemeral=True)
         return
 
     discord_id = contract["discord_id"]
@@ -3358,6 +3399,12 @@ async def approve_contract(interaction: discord.Interaction, contract_id: int):
         "UPDATE contracts SET confirm_status='APPROVED', confirmed_by=?, confirmed_at=? WHERE id=?",
         (admin_id, now, contract_id)
     )
+
+    # 1.0) статус на сообщении подачи
+    try:
+        await mark_contract_upload_message(interaction.client, contract, True)
+    except Exception as e:
+        print(f"[contract-mark] warn: {e}")
 
     # 1.0) синхронизация с панелью
     try:
@@ -3516,6 +3563,12 @@ class RejectReasonModal(Modal, title="Причина отклонения"):
             (admin_id, now, reason, self.contract_id)
         )
 
+        # Статус на сообщении подачи
+        try:
+            await mark_contract_upload_message(interaction.client, contract, False)
+        except Exception as e:
+            print(f"[contract-mark] warn: {e}")
+
         # Синхронизация с панелью
         try:
             from services.api_sync import queue_contract_sync
@@ -3563,19 +3616,22 @@ class RejectReasonModal(Modal, title="Причина отклонения"):
 
 
 async def show_promo_reports(interaction: discord.Interaction, page: int = 0):
+    gid = str(interaction.guild.id) if interaction.guild else None
     reports = await fetch_all(
         """SELECT pr.*, r1.name AS from_name, r2.name AS to_name
            FROM promotion_reports pr
            LEFT JOIN ranks r1 ON pr.from_rank_id = r1.id
            LEFT JOIN ranks r2 ON pr.to_rank_id = r2.id
            WHERE pr.status IN ('NEW','TAKEN')
+             AND (? IS NULL OR pr.guild_id = ? OR pr.guild_id IS NULL)
            ORDER BY pr.report_id DESC
            LIMIT 10 OFFSET ?""",
-        (page * 10,)
+        (gid, gid, page * 10)
     )
     total = await fetch_one(
         "SELECT COUNT(*) AS cnt FROM promotion_reports WHERE status IN ('NEW','TAKEN')"
-    )
+        " AND (? IS NULL OR guild_id = ? OR guild_id IS NULL)",
+        (gid, gid))
     total_count = total["cnt"] if total else 0
 
     if not reports:
@@ -3793,6 +3849,9 @@ async def approve_promotion(interaction: discord.Interaction, report_id: int):
     if not r or r["status"] not in ("NEW", "TAKEN"):
         await interaction.followup.send("❌ Отчёт уже обработан.", ephemeral=True)
         return
+    if interaction.guild and r.get("guild_id") and str(r["guild_id"]) != str(interaction.guild.id):
+        await interaction.followup.send("❌ Этот отчет с другого сервера.", ephemeral=True)
+        return
 
     guild = interaction.guild or interaction.client.get_guild(GUILD_ID)
     if guild is None:
@@ -3918,6 +3977,9 @@ async def reject_promotion(interaction: discord.Interaction, report_id: int, rea
     if not r or r["status"] not in ("NEW", "TAKEN"):
         await interaction.response.send_message("❌ Отчёт уже обработан.", ephemeral=True)
         return
+    if interaction.guild and r.get("guild_id") and str(r["guild_id"]) != str(interaction.guild.id):
+        await interaction.response.send_message("❌ Этот отчет с другого сервера.", ephemeral=True)
+        return
 
     admin_id = str(interaction.user.id)
 
@@ -4019,6 +4081,7 @@ async def calc_live_sums(discord_id: str, week_start: str, week_end: str) -> dic
 async def show_bonus_reports(interaction: discord.Interaction, page: int = 0):
     week_start, week_end = week_range_msk()
     offset = page * 10
+    gid = str(interaction.guild.id) if interaction.guild else None
 
     reports = await fetch_all(
         """
@@ -4065,22 +4128,24 @@ async def show_bonus_reports(interaction: discord.Interaction, page: int = 0):
           ) AS live_base_total
 
         FROM bonus_reports br
-        WHERE br.status IN ('NEW','TAKEN')
-           OR (br.status='APPROVED' AND br.week_start=? AND br.week_end=?)
+        WHERE (br.status IN ('NEW','TAKEN')
+           OR (br.status='APPROVED' AND br.week_start=? AND br.week_end=?))
+          AND (? IS NULL OR br.guild_id = ?)
         ORDER BY br.report_id DESC
         LIMIT 10 OFFSET ?
         """,
-        (week_start, week_end, offset)
+        (week_start, week_end, gid, gid, offset)
     )
 
     total = await fetch_one(
         """
         SELECT COUNT(*) AS cnt
         FROM bonus_reports
-        WHERE status IN ('NEW','TAKEN')
-           OR (status='APPROVED' AND week_start=? AND week_end=?)
+        WHERE (status IN ('NEW','TAKEN')
+           OR (status='APPROVED' AND week_start=? AND week_end=?))
+          AND (? IS NULL OR guild_id = ?)
         """,
-        (week_start, week_end)
+        (week_start, week_end, gid, gid)
     )
 
     total_count = int(total["cnt"] or 0) if total else 0
@@ -4353,6 +4418,9 @@ async def approve_bonus(interaction: discord.Interaction, report_id: int):
     if not r:
         await interaction.response.send_message("❌ Отчёт не найден.", ephemeral=True)
         return
+    if interaction.guild and r.get("guild_id") and str(r["guild_id"]) != str(interaction.guild.id):
+        await interaction.response.send_message("❌ Этот отчет с другого сервера.", ephemeral=True)
+        return
 
     from cogs.bonus import week_locked
     if week_locked(r.get("week_end") or ""):
@@ -4392,9 +4460,8 @@ async def approve_bonus(interaction: discord.Interaction, report_id: int):
 
     await update_bonus_audit_message(interaction.client, report_id)
 
-    embed = discord.Embed(title="✅ Премия одобрена", color=0x2ECC71)
+    embed = discord.Embed(title=f"✅ Премия #{report_id} одобрена", color=0x2ECC71)
     embed.description = (
-        f"Отчёт #{report_id} одобрен.\n"
         f"Пользователь: <@{r['discord_id']}>\n"
         f"Контракты: {round(contracts_sum, 2)}\n"
         f"Надбавка за ранг: {round(rank_bonus_sum, 2)}\n"
@@ -4402,7 +4469,7 @@ async def approve_bonus(interaction: discord.Interaction, report_id: int):
         f"Море: {round(sea, 2)}\n"
         f"Итого: **{round(total, 2)}**"
     )
-    await interaction.response.edit_message(embed=embed, view=BonusActionView(report_id))
+    await interaction.response.edit_message(embed=embed, view=None)
 
     log = discord.Embed(title="✅ Премия принята", color=0x2ECC71)
     log.add_field(name="Премия отчет", value=str(report_id), inline=True)
@@ -4432,7 +4499,7 @@ class RejectBonusModal(discord.ui.Modal, title="Отклонение преми�
     async def on_submit(self, interaction: discord.Interaction):
         r = await fetch_one(
             """
-            SELECT report_id, discord_id, week_start, week_end, status, sea_amount, site_id
+            SELECT report_id, discord_id, week_start, week_end, status, sea_amount, site_id, guild_id
             FROM bonus_reports
             WHERE report_id=?
             """,
@@ -4441,6 +4508,9 @@ class RejectBonusModal(discord.ui.Modal, title="Отклонение преми�
 
         if not r:
             await interaction.response.send_message("Репорт не найден.", ephemeral=True)
+            return
+        if interaction.guild and r.get("guild_id") and str(r["guild_id"]) != str(interaction.guild.id):
+            await interaction.response.send_message("❌ Этот отчет с другого сервера.", ephemeral=True)
             return
 
         st = (r["status"] or "").upper()
