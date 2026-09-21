@@ -3335,28 +3335,22 @@ PROMO_EXCLUDED_TYPES = {
     "агитации wn",
 }
 
-async def mark_contract_upload_message(client, contract, accepted: bool):
-    """Проставить статус на сообщении подачи (embed + снять кнопки)."""
+async def mark_contract_message(client, channel_id, message_id, accepted: bool, title: str):
+    """Проставить статус на сообщении ревью (embed + снять кнопки)."""
     try:
-        import json as _json
-        details = contract.get("details")
-        if isinstance(details, str):
-            details = _json.loads(details)
-        up = (details or {}).get("upload") or {}
-        ch_id, msg_id = up.get("channel_id"), up.get("message_id")
-        if not ch_id or not msg_id:
+        if not channel_id or not message_id:
             return False
-        ch = client.get_channel(int(ch_id))
+        ch = client.get_channel(int(channel_id))
         if ch is None:
             try:
-                ch = await client.fetch_channel(int(ch_id))
+                ch = await client.fetch_channel(int(channel_id))
             except Exception:
                 return False
         try:
-            msg = await ch.fetch_message(int(msg_id))
+            msg = await ch.fetch_message(int(message_id))
         except Exception:
             return False
-        emb = msg.embeds[0] if msg.embeds else discord.Embed(title=f"Контракт #{contract.get('id')}")
+        emb = msg.embeds[0] if msg.embeds else discord.Embed(title=title)
         emb.color = 0x2ECC71 if accepted else 0xE74C3C
         emb.add_field(name="Статус", value="✅ Принят" if accepted else "❌ Отклонен", inline=False)
         await msg.edit(embed=emb, view=None)
@@ -3400,9 +3394,14 @@ async def approve_contract(interaction: discord.Interaction, contract_id: int):
         (admin_id, now, contract_id)
     )
 
-    # 1.0) статус на сообщении подачи
+    # 1.0) статус на сообщении ревью (только для зеркал с сайта)
     try:
-        await mark_contract_upload_message(interaction.client, contract, True)
+        _review = await fetch_one(
+            "SELECT channel_id, discord_message_id, site_id FROM contracts WHERE id = ?", (contract_id,))
+        if _review and _review.get("site_id") and _review.get("discord_message_id"):
+            await mark_contract_message(
+                interaction.client, _review["channel_id"], _review["discord_message_id"],
+                True, f"Контракт #{contract_id}")
     except Exception as e:
         print(f"[contract-mark] warn: {e}")
 
@@ -3563,9 +3562,14 @@ class RejectReasonModal(Modal, title="Причина отклонения"):
             (admin_id, now, reason, self.contract_id)
         )
 
-        # Статус на сообщении подачи
+        # Статус на сообщении ревью (только для зеркал с сайта)
         try:
-            await mark_contract_upload_message(interaction.client, contract, False)
+            _review = await fetch_one(
+                "SELECT channel_id, discord_message_id, site_id FROM contracts WHERE id = ?", (self.contract_id,))
+            if _review and _review.get("site_id") and _review.get("discord_message_id"):
+                await mark_contract_message(
+                    interaction.client, _review["channel_id"], _review["discord_message_id"],
+                    False, f"Контракт #{self.contract_id}")
         except Exception as e:
             print(f"[contract-mark] warn: {e}")
 

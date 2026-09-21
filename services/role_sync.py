@@ -657,7 +657,7 @@ async def _mirror_site_contract(bot, guild_id: str, r: dict):
 
 
 async def _post_contract_review(bot, guild_id: str, r: dict):
-    """Карточка контракта с сайта: правим сообщение подачи (дублей нет) + кнопки."""
+    """Отдельное компактное сообщение-ревью: пинги + эмбед 'Контракт #N' + кнопки."""
     if bot is None:
         return
     try:
@@ -672,26 +672,13 @@ async def _post_contract_review(bot, guild_id: str, r: dict):
         local = await fetch_one("SELECT * FROM contracts WHERE site_id = ?", (r.get("id"),))
         if not local:
             return
-        details = r.get("details")
-        if isinstance(details, str):
-            try:
-                details = json.loads(details)
-            except Exception:
-                details = {}
-        details = details or {}
-        upload = details.get("upload") or {}
-        ch_id = upload.get("channel_id")
-        msg_id = upload.get("message_id")
-        if not ch_id:
-            cfg = await fetch_all(
-                "SELECT setting_value FROM guild_settings WHERE guild_id = ? AND setting_key IN ('contracts_upload_channel_id', 'contracts_log_channel_id')",
-                (str(guild_id),),
-            )
-            for row in cfg:
-                if (row["setting_value"] or "").strip().isdigit():
-                    ch_id = row["setting_value"].strip()
-                    break
-        if not ch_id:
+        cfg = await fetch_all(
+            "SELECT setting_key, setting_value FROM guild_settings WHERE guild_id = ? AND setting_key IN ('contracts_upload_channel_id', 'contracts_log_channel_id', 'contracts_ping_role_ids')",
+            (str(guild_id),),
+        )
+        cfg_map = {x["setting_key"]: x["setting_value"] for x in cfg}
+        ch_id = (cfg_map.get("contracts_upload_channel_id") or cfg_map.get("contracts_log_channel_id") or "").strip()
+        if not ch_id or not ch_id.isdigit():
             return
         channel = guild.get_channel(int(ch_id))
         if channel is None:
@@ -699,48 +686,36 @@ async def _post_contract_review(bot, guild_id: str, r: dict):
                 channel = await guild.fetch_channel(int(ch_id))
             except Exception:
                 return
-        embed = discord.Embed(title=f"📄 Контракт #{local['id']} (с сайта)", color=0x3498DB)
+        ping_ids = [x.strip() for x in (cfg_map.get("contracts_ping_role_ids") or "").split(",") if x.strip().isdigit()]
+        pings = " ".join(f"<@&{pid}>" for pid in ping_ids)
+        embed = discord.Embed(title=f"📄 Контракт #{r.get('id')}", color=0x3498DB)
         embed.add_field(name="Тип", value=str(r.get("contract_type")), inline=True)
         embed.add_field(name="Пользователь", value=f"<@{r.get('discord_id')}>", inline=True)
         if r.get("price"):
             embed.add_field(name="Сумма", value=str(r.get("price")), inline=True)
-        for k, v in details.items():
-            if k in ("attachments", "upload"):
-                continue
-            embed.add_field(name=str(k), value=str(v)[:1024], inline=False)
-        atts = details.get("attachments") or []
-        if atts:
-            embed.set_image(url=atts[0])
-            if len(atts) > 1:
-                embed.add_field(
-                    name="📎 Еще скрины",
-                    value="\n".join(f"[Скриншот {i+1}]({u})" for i, u in enumerate(atts[1:][:5])),
-                    inline=False,
-                )
         embed.add_field(
             name="Сайт", value=f"https://botdiscord-87a.pages.dev/contracts/{r.get('id')}", inline=False)
         view = ContractActionView(int(local["id"]))
-        if msg_id:
-            try:
-                msg = await channel.fetch_message(int(msg_id))
-                await msg.edit(embed=embed, view=view)
-                return
-            except Exception:
-                pass
-        await channel.send(embed=embed, view=view)
+        msg = await channel.send(content=pings or None, embed=embed, view=view)
+        await execute(
+            "UPDATE contracts SET channel_id = ?, discord_message_id = ? WHERE id = ?",
+            (str(channel.id), str(msg.id), local["id"]),
+        )
     except Exception as e:
         print(f"[contracts-log] warn: {e}")
 
 
 async def _reply_contract_decision(bot, guild_id: str, r: dict, decision: str):
-    """Решение с сайта - статус на сообщении подачи (без дублей)."""
+    """Решение с сайта - статус на сообщении ревью (без дублей)."""
     if bot is None:
         return
     try:
         local = await fetch_one("SELECT * FROM contracts WHERE site_id = ?", (r.get("id"),))
-        if not local:
+        if not local or not local.get("discord_message_id"):
             return
-        from cogs.admin_panel import mark_contract_upload_message
-        await mark_contract_upload_message(bot, local, decision == "APPROVED")
+        from cogs.admin_panel import mark_contract_message
+        await mark_contract_message(
+            bot, local.get("channel_id"), local.get("discord_message_id"),
+            decision == "APPROVED", f"Контракт #{r.get('id')}")
     except Exception as e:
         print(f"[contracts-log] warn: {e}")
