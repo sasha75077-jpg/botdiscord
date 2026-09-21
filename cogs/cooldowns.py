@@ -19,7 +19,7 @@ GLOBAL_COOLDOWNS = {
 }
 
 TUNING_TITLE = "Тюнинг"
-TUNING_DEFAULT_SECONDS = 6 * 3600
+TUNING_DEFAULT_SECONDS = 4 * 3600
 
 
 def utc_now() -> datetime:

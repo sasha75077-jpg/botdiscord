@@ -1431,15 +1431,16 @@ class SetStaticModal(discord.ui.Modal, title="Установить статик"
         if not st:
             await interaction.response.send_message("Статик не должен быть пустым.", ephemeral=True)
             return
+        _sgid = str(interaction.guild.id) if interaction.guild else None
 
-        row = await fetch_one("SELECT static FROM users WHERE discord_id = ?", (str(uid),))
+        row = await fetch_one("SELECT static FROM users WHERE discord_id = ? AND (? IS NULL OR guild_id = ?)", (str(uid), _sgid, _sgid))
         old = (row["static"] if row and "static" in row.keys() else (row[0] if row else None))
         old = (old or "").strip()
 
         if row:
-            await execute("UPDATE users SET static = ? WHERE discord_id = ?", (st, str(uid)))
+            await execute("UPDATE users SET static = ? WHERE discord_id = ? AND (? IS NULL OR guild_id = ?)", (st, str(uid), _sgid, _sgid))
         else:
-            await execute("INSERT INTO users (discord_id, static) VALUES (?, ?)", (str(uid), st))
+            await execute("INSERT INTO users (discord_id, guild_id, static) VALUES (?, ?, ?)", (str(uid), _sgid or "", st))
 
         if old:
             await interaction.response.send_message(f"Готово. `{uid}`: `{old}` → `{st}`", ephemeral=True)
@@ -1850,8 +1851,9 @@ class SetStaticView(discord.ui.View):
         if not st:
             await interaction.response.send_message("Сначала задай static.", ephemeral=True)
             return
+        _sg = str(interaction.guild.id) if interaction.guild else None
 
-        row = await fetch_one("SELECT static FROM users WHERE discord_id = ?", (str(self.selected_user_id),))
+        row = await fetch_one("SELECT static FROM users WHERE discord_id = ? AND (? IS NULL OR guild_id = ?)", (str(self.selected_user_id), _sg, _sg))
         old = None
         if row:
             # подстрой под то, что возвращает твой fetch_one (dict/tuple)
@@ -1859,9 +1861,9 @@ class SetStaticView(discord.ui.View):
             old = (old or "").strip()
 
         if row:
-            await execute("UPDATE users SET static = ? WHERE discord_id = ?", (st, str(self.selected_user_id)))
+            await execute("UPDATE users SET static = ? WHERE discord_id = ? AND (? IS NULL OR guild_id = ?)", (st, str(self.selected_user_id), _sg, _sg))
         else:
-            await execute("INSERT INTO users (discord_id, static) VALUES (?, ?)", (str(self.selected_user_id), st))
+            await execute("INSERT INTO users (discord_id, guild_id, static) VALUES (?, ?, ?)", (str(self.selected_user_id), _sg or "", st))
 
         if old:
             await interaction.response.send_message(f"Готово: `{old}` → `{st}`", ephemeral=True)
@@ -1935,17 +1937,18 @@ class SetStaticScreen(discord.ui.View):
         if not st:
             await interaction.response.send_message("Сначала задай static.", ephemeral=True)
             return
+        _sg2 = str(interaction.guild.id) if interaction.guild else None
 
-        row = await fetch_one("SELECT static FROM users WHERE discord_id = ?", (str(self.user_id),))
+        row = await fetch_one("SELECT static FROM users WHERE discord_id = ? AND (? IS NULL OR guild_id = ?)", (str(self.user_id), _sg2, _sg2))
         old = ""
         if row:
             old = (row.get("static") if hasattr(row, "get") else row[0]) or ""
             old = old.strip()
 
         if row:
-            await execute("UPDATE users SET static = ? WHERE discord_id = ?", (st, str(self.user_id)))
+            await execute("UPDATE users SET static = ? WHERE discord_id = ? AND (? IS NULL OR guild_id = ?)", (st, str(self.user_id), _sg2, _sg2))
         else:
-            await execute("INSERT INTO users (discord_id, static) VALUES (?, ?)", (str(self.user_id), st))
+            await execute("INSERT INTO users (discord_id, guild_id, static) VALUES (?, ?, ?)", (str(self.user_id), _sg2 or "", st))
 
         msg = f"Готово. `{self.user_id}`: `{old}` → `{st}`" if old else f"Готово. `{self.user_id}` static = `{st}`"
         await interaction.response.send_message(msg, ephemeral=True)
@@ -2039,20 +2042,21 @@ class ManualRankSetView(discord.ui.View):
         if not self.selected_user_id or not self.selected_rank_id:
             await interaction.response.send_message("❌ Выбери пользователя и ранг.", ephemeral=True)
             return
+        _mgg = str(interaction.guild.id)
 
         await interaction.response.defer(ephemeral=True)
 
         old = await fetch_one(
             "SELECT u.current_rank_id AS rank_id, r.name AS rank_name "
             "FROM users u LEFT JOIN ranks r ON r.id = u.current_rank_id "
-            "WHERE u.discord_id = ?",
-            (str(self.selected_user_id),),
+            "WHERE u.discord_id = ? AND (? IS NULL OR u.guild_id = ?)",
+            (str(self.selected_user_id), _mgg, _mgg),
         )
         old_name = (old["rank_name"] if old and old.get("rank_name") else "—")
 
         await execute(
-            "UPDATE users SET current_rank_id=? WHERE discord_id=?",
-            (int(self.selected_rank_id), str(self.selected_user_id)),
+            "UPDATE users SET current_rank_id=? WHERE discord_id=? AND (? IS NULL OR guild_id = ?)",
+            (int(self.selected_rank_id), str(self.selected_user_id), _mgg, _mgg),
         )
 
         member = interaction.guild.get_member(self.selected_user_id) or await interaction.guild.fetch_member(self.selected_user_id)
@@ -2674,18 +2678,19 @@ class AdminPanel(commands.Cog):
         if not st:
             await interaction.response.send_message("Статик не должен быть пустым.", ephemeral=True)
             return
-    
+        _sg3 = str(interaction.guild.id) if interaction.guild else None
+
         row = await fetch_one(
-            "SELECT static FROM users WHERE discord_id = ?",
-            (str(user.id),),
+            "SELECT static FROM users WHERE discord_id = ? AND (? IS NULL OR guild_id = ?)",
+            (str(user.id), _sg3, _sg3),
         )
         old = (row["static"] if row and "static" in row.keys() else (row[0] if row else None))  # на случай dict/tuple
         old = (old or "").strip()
-        
+
         if row:
-            await execute("UPDATE users SET static = ? WHERE discord_id = ?", (st, str(user.id)))
+            await execute("UPDATE users SET static = ? WHERE discord_id = ? AND (? IS NULL OR guild_id = ?)", (st, str(user.id), _sg3, _sg3))
         else:
-            await execute("INSERT INTO users (discord_id, static) VALUES (?, ?)", (str(user.id), st))
+            await execute("INSERT INTO users (discord_id, guild_id, static) VALUES (?, ?, ?)", (str(user.id), _sg3 or "", st))
         
         if old:
             msg = f"Ок. {user.mention} static: `{old}` → `{st}`"
@@ -3446,11 +3451,12 @@ async def approve_contract(interaction: discord.Interaction, contract_id: int):
     await upsert_pending_counter_message(interaction.client, f"⏳ Ожидание проверки контрактов: {cnt}")
 
     # 2) ensure user
-    user = await fetch_one("SELECT 1 AS ok FROM users WHERE discord_id = ?", (discord_id,))
+    _ag = str(interaction.guild.id) if interaction.guild else (contract.get("guild_id") or "")
+    user = await fetch_one("SELECT 1 AS ok FROM users WHERE discord_id = ? AND guild_id = ?", (discord_id, _ag))
     if not user:
         await execute(
-            "INSERT INTO users (discord_id, current_rank_id, family_total, tuning_total) VALUES (?, NULL, 0, 0)",
-            (discord_id,)
+            "INSERT INTO users (discord_id, guild_id, current_rank_id, family_total, tuning_total) VALUES (?, ?, NULL, 0, 0)",
+            (discord_id, _ag)
         )
 
     credit_day = (contract.get("msk_date_iso") or "").strip()
@@ -3459,38 +3465,39 @@ async def approve_contract(interaction: discord.Interaction, contract_id: int):
     # 3) начисление в повышение + антидубль (личные: тюнинг/курьер - в свой котел)
     if (not excluded) and credit_day:
         credit_kind = "tuning" if is_personal else "family"
+        _cg = str(interaction.guild.id) if interaction.guild else (contract.get("guild_id") or "")
 
         if is_personal:
             # ТЮНИНГ: удаляем старые за день и добавляем новую (обходит UNIQUE)
             await execute(
-                "DELETE FROM promo_credits WHERE discord_id=? AND credit_day=? AND credit_kind=? AND contract_type=?",
-                (str(discord_id), credit_day, credit_kind, ct)
+                "DELETE FROM promo_credits WHERE discord_id=? AND credit_day=? AND credit_kind=? AND contract_type=? AND (? = '' OR guild_id = ? OR guild_id IS NULL)",
+                (str(discord_id), credit_day, credit_kind, ct, _cg, _cg)
             )
             await execute(
-                "INSERT INTO promo_credits(discord_id, credit_day, credit_kind, contract_type, contract_id) "
-                "VALUES(?,?,?,?,?)",
-                (str(discord_id), credit_day, credit_kind, ct, int(contract_id))
+                "INSERT INTO promo_credits(discord_id, credit_day, credit_kind, contract_type, contract_id, guild_id) "
+                "VALUES(?,?,?,?,?,?)",
+                (str(discord_id), credit_day, credit_kind, ct, int(contract_id), _cg)
             )
             counted_for_promo = True
         else:
             # FAMILY: INSERT OR IGNORE (только раз в день)
             await execute(
-                "INSERT OR IGNORE INTO promo_credits(discord_id, credit_day, credit_kind, contract_type, contract_id) "
-                "VALUES(?,?,?,?,?)",
-                (str(discord_id), credit_day, credit_kind, ct, int(contract_id))
+                "INSERT OR IGNORE INTO promo_credits(discord_id, credit_day, credit_kind, contract_type, contract_id, guild_id) "
+                "VALUES(?,?,?,?,?,?)",
+                (str(discord_id), credit_day, credit_kind, ct, int(contract_id), _cg)
             )
             row = await fetch_one(
                 "SELECT 1 AS ok FROM promo_credits "
-                "WHERE discord_id=? AND credit_day=? AND credit_kind=? AND contract_type=? AND contract_id=?",
-                (str(discord_id), credit_day, credit_kind, ct, int(contract_id))
+                "WHERE discord_id=? AND credit_day=? AND credit_kind=? AND contract_type=? AND contract_id=? AND (? = '' OR guild_id = ? OR guild_id IS NULL)",
+                (str(discord_id), credit_day, credit_kind, ct, int(contract_id), _cg, _cg)
             )
             counted_for_promo = bool(row)
     
         if counted_for_promo:
             if is_personal:
-                await execute("UPDATE users SET tuning_total = tuning_total + 1 WHERE discord_id = ?", (discord_id,))
+                await execute("UPDATE users SET tuning_total = tuning_total + 1 WHERE discord_id = ? AND guild_id = ?", (discord_id, _ag))
             else:
-                await execute("UPDATE users SET family_total = family_total + 1 WHERE discord_id = ?", (discord_id,))
+                await execute("UPDATE users SET family_total = family_total + 1 WHERE discord_id = ? AND guild_id = ?", (discord_id, _ag))
                 
     # 4) текст (нужен для audit/DM)
     if excluded:
@@ -3917,9 +3924,10 @@ async def approve_promotion(interaction: discord.Interaction, report_id: int):
         print(f"[api_sync] warn: {e}")
 
     # 2) current_rank_id пользователю
+    _pg = str(guild.id)
     await execute(
-        "UPDATE users SET current_rank_id=? WHERE discord_id=?",
-        (r["to_rank_id"], r["discord_id"]),
+        "UPDATE users SET current_rank_id=? WHERE discord_id=? AND (? IS NULL OR guild_id = ?)",
+        (r["to_rank_id"], r["discord_id"], _pg, _pg),
     )
 
     # 3) списание контрактов

@@ -29,15 +29,16 @@ from cogs.cooldowns import show_personal_tuning_cooldown
 
 # Построение общей статистики эмбед
 
-async def build_stats_embed(uid: str) -> discord.Embed:
+async def build_stats_embed(uid: str, guild_id: str | None = None) -> discord.Embed:
     rows = await fetch_all(
-        "SELECT * FROM contracts WHERE discord_id = ? AND confirm_status = 'APPROVED'",
-        (uid,)
+        "SELECT * FROM contracts WHERE discord_id = ? AND confirm_status = 'APPROVED' AND (? IS NULL OR guild_id = ?)",
+        (uid, guild_id, guild_id)
     )
 
     activations = 0
     fish_times = 0
     atelier_uniforms = 0
+    courier_count = 0
     ore_totals = {}
     mining_totals = {"iron": 0, "silver": 0, "copper": 0, "tin": 0, "gold": 0}
     goods_loading = 0
@@ -90,6 +91,9 @@ async def build_stats_embed(uid: str) -> discord.Embed:
         elif ct == "тюнинг":
             tuning_count += 1
 
+        elif ct == "курьер-еды":
+            courier_count += 1
+
     embed = discord.Embed(title="📊 Моя статистика контрактов", color=0x9B7BFF)
     embed.description = "Все одобренные контракты за всё время"
 
@@ -125,6 +129,7 @@ async def build_stats_embed(uid: str) -> discord.Embed:
         inline=True
     )
     embed.add_field(name="🏍️ Тюнинг", value=f"{tuning_count} раз", inline=True)
+    embed.add_field(name="🛵 Курьер еды", value=f"{courier_count} раз", inline=True)
 
     return embed
 
@@ -134,7 +139,8 @@ class StatsBackView(View):
 
     @discord.ui.button(label="⬅️ Назад", style=discord.ButtonStyle.secondary)
     async def back_btn(self, interaction: discord.Interaction, button: Button):
-        embed = await build_profile_embed(str(interaction.user.id))
+        _gid = str(interaction.guild.id) if interaction.guild else None
+        embed = await build_profile_embed(str(interaction.user.id), _gid)
         await interaction.response.edit_message(embed=embed, view=MainPanelView())
 
 
@@ -220,9 +226,10 @@ async def build_bonus_preview_embed(
     week_start: str,
     week_end: str,
     page: int,
-    per_page: int = 10
+    per_page: int = 10,
+    guild_id: str | None = None,
 ) -> discord.Embed:
-    embed = await build_profile_embed(uid)
+    embed = await build_profile_embed(uid, guild_id)
 
     sums = await calc_live_sums(uid, week_start, week_end)
     contracts_sum = float(sums.get("base_sum") or 0)
@@ -295,18 +302,18 @@ async def calc_live_base_sum(discord_id: str, week_start: str, week_end: str) ->
     return float((row["base_sum"] if row else 0) or 0.0)
 
 
-async def get_user_rank_row(discord_id: str):
+async def get_user_rank_row(discord_id: str, guild_id: str | None = None):
     return await fetch_one(
         "SELECT r.id AS rank_id, r.name AS rank_name, r.role_id AS role_id "
         "FROM users u "
         "LEFT JOIN ranks r ON r.id = u.current_rank_id "
-        "WHERE u.discord_id = ?",
-        (discord_id,),
+        "WHERE u.discord_id = ? AND (? IS NULL OR u.guild_id = ?)",
+        (discord_id, guild_id, guild_id),
     )
 
 
-async def get_current_rank_name(discord_id: int) -> str:
-    row = await get_user_rank_row(str(discord_id))
+async def get_current_rank_name(discord_id: int, guild_id: str | None = None) -> str:
+    row = await get_user_rank_row(str(discord_id), guild_id)
     if not row:
         return "—"
     # row может быть dict-like или tuple, но у тебя чаще dict/Row
@@ -315,29 +322,30 @@ async def get_current_rank_name(discord_id: int) -> str:
 
 
 
-async def ensure_user_row(discord_id: str) -> None:
+async def ensure_user_row(discord_id: str, guild_id: str | None = None) -> None:
     """Создаёт строку users, если её нет (snake_case: users.discord_id)."""
     user = await fetch_one(
-        "SELECT discord_id FROM users WHERE discord_id = ?",
-        (discord_id,),
+        "SELECT discord_id FROM users WHERE discord_id = ? AND (? IS NULL OR guild_id = ?)",
+        (discord_id, guild_id, guild_id),
     )
     if user:
         return
 
     await execute(
-        "INSERT INTO users (discord_id, current_rank_id, family_total, tuning_total) "
-        "VALUES (?, NULL, 0, 0)",
-        (discord_id,),
+        "INSERT INTO users (discord_id, guild_id, current_rank_id, family_total, tuning_total) "
+        "VALUES (?, ?, NULL, 0, 0)",
+        (discord_id, guild_id or ""),
     )
 
 
 async def require_static(interaction: discord.Interaction) -> Optional[str]:
     """Возвращает users.static или показывает ошибку и возвращает None."""
     uid = str(interaction.user.id)
+    gid = str(interaction.guild.id) if interaction.guild else None
 
     row = await fetch_one(
-        "SELECT static FROM users WHERE discord_id = ?",
-        (uid,)
+        "SELECT static FROM users WHERE discord_id = ? AND (? IS NULL OR guild_id = ?)",
+        (uid, gid, gid)
     )
 
     static = row["static"] if row and row["static"] else None
@@ -473,11 +481,12 @@ async def get_rank_name_from_discord(member: discord.Member) -> str:
 
 async def update_user_rank_id_from_discord(member: discord.Member) -> int | None:
     uid = str(member.id)
-    await ensure_user(uid)
+    gid = str(member.guild.id)
+    await ensure_user(uid, gid)
 
     role_ids = [r.id for r in member.roles if r.id != member.guild.default_role.id]
     if not role_ids:
-        await execute("UPDATE users SET current_rank_id = NULL WHERE discord_id = ?", (uid,))
+        await execute("UPDATE users SET current_rank_id = NULL WHERE discord_id = ? AND guild_id = ?", (uid, gid))
         return None
 
     placeholders = ",".join(["?"] * len(role_ids))
@@ -485,27 +494,27 @@ async def update_user_rank_id_from_discord(member: discord.Member) -> int | None
         f"""
         SELECT id
         FROM ranks
-        WHERE role_id IN ({placeholders})
+        WHERE role_id IN ({placeholders}) AND guild_id = ?
         ORDER BY sort_order DESC
         LIMIT 1
         """,
-        tuple(role_ids),
+        (*tuple(role_ids), gid),
     )
 
     rank_id = int(row["id"]) if row and row["id"] is not None else None
-    await execute("UPDATE users SET current_rank_id = ? WHERE discord_id = ?", (rank_id, uid))
+    await execute("UPDATE users SET current_rank_id = ? WHERE discord_id = ? AND guild_id = ?", (rank_id, uid, gid))
     return rank_id
 
 
-async def get_user_rank_name(uid: str) -> str:
+async def get_user_rank_name(uid: str, guild_id: str | None = None) -> str:
     row = await fetch_one(
         """
         SELECT r.name AS rank_name
         FROM users u
         LEFT JOIN ranks r ON r.id = u.current_rank_id
-        WHERE u.discord_id = ?
+        WHERE u.discord_id = ? AND (? IS NULL OR u.guild_id = ?)
         """,
-        (uid,)
+        (uid, guild_id, guild_id)
     )
     return (row["rank_name"] or "—") if row else "—"
 
@@ -514,9 +523,10 @@ async def get_user_rank_name(uid: str) -> str:
 # ---- UI ----
 
 class BonusPreviewPagerView(discord.ui.View):
-    def __init__(self, uid: str, report_id: int, week_start: str, week_end: str, page: int = 0, per_page: int = 10):
+    def __init__(self, uid: str, report_id: int, week_start: str, week_end: str, page: int = 0, per_page: int = 10, guild_id: str | None = None):
         super().__init__(timeout=300)
         self.uid = str(uid)
+        self.gid = guild_id
         self.report_id = int(report_id)
         self.week_start = week_start
         self.week_end = week_end
@@ -565,21 +575,21 @@ class BonusPreviewPagerView(discord.ui.View):
     
         # уже отправлен / в работе / решён — повторно не отправляем
         if st in ("NEW", "TAKEN", "APPROVED"):
-            embed = await build_profile_embed(self.uid)
+            embed = await build_profile_embed(self.uid, self.gid)
             embed.description = f"❌ Отчёт уже активен (статус: **{st}**). Повторно отправить нельзя."
             await interaction.edit_original_response(embed=embed, view=MainPanelView())
             return
     
         # если отклонён — пусть сначала создастся новый DRAFT через кнопку "Премия"
         if st == "REJECTED":
-            embed = await build_profile_embed(self.uid)
+            embed = await build_profile_embed(self.uid, self.gid)
             embed.description = "❌ Отчёт отклонён. Нажмите «Премия» заново, чтобы пересоздать предпросмотр."
             await interaction.edit_original_response(embed=embed, view=MainPanelView())
             return
     
         # ожидаем, что сейчас DRAFT
         if st != "DRAFT":
-            embed = await build_profile_embed(self.uid)
+            embed = await build_profile_embed(self.uid, self.gid)
             embed.description = f"❌ Нельзя отправить отчёт из статуса **{st}**."
             await interaction.edit_original_response(embed=embed, view=MainPanelView())
             return
@@ -625,7 +635,7 @@ class BonusPreviewPagerView(discord.ui.View):
             except Exception as e:
                 print(f"Audit log failed for report {self.report_id}: {e}")
 
-        embed = await build_profile_embed(self.uid)
+        embed = await build_profile_embed(self.uid, self.gid)
         embed.description = (
             f"✅ Отчёт на премию отправлен на рассмотрение (ID {self.report_id}).\n"
             f"Контракты: {round(contracts_sum, 2)}; "
@@ -637,7 +647,8 @@ class BonusPreviewPagerView(discord.ui.View):
 
     @discord.ui.button(label="⬅️ Назад", style=discord.ButtonStyle.secondary, custom_id="bonus_back")
     async def back_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = await build_profile_embed(self.uid)
+        _bg = str(interaction.guild.id) if interaction.guild else self.gid
+        embed = await build_profile_embed(self.uid, _bg)
         embed.description = "Выберите действие:"
         await interaction.response.edit_message(embed=embed, view=MainPanelView())
 
@@ -653,11 +664,12 @@ class SetStaticModal(discord.ui.Modal, title="Указать static"):
 
     async def on_submit(self, interaction: discord.Interaction):
         uid = str(interaction.user.id)
+        gid = str(interaction.guild.id) if interaction.guild else None
         val = self.static.value.strip()
 
-        await ensure_user(uid)
+        await ensure_user(uid, gid)
 
-        row = await fetch_one("SELECT static FROM users WHERE discord_id = ?", (uid,))
+        row = await fetch_one("SELECT static FROM users WHERE discord_id = ? AND (? IS NULL OR guild_id = ?)", (uid, gid, gid))
         if row and (row["static"] or "").strip():
             await interaction.response.send_message(
                 "❌ Static уже задан. Если нужно изменить — попроси администратора.",
@@ -665,8 +677,8 @@ class SetStaticModal(discord.ui.Modal, title="Указать static"):
             )
             return
 
-        await execute("UPDATE users SET static = ? WHERE discord_id = ?", (val, uid))
-        embed = await build_profile_embed(uid)
+        await execute("UPDATE users SET static = ? WHERE discord_id = ? AND (? IS NULL OR guild_id = ?)", (val, uid, gid, gid))
+        embed = await build_profile_embed(uid, gid)
         await interaction.response.edit_message(embed=embed, view=MainPanelView())
 
 
@@ -687,7 +699,7 @@ class UserPanel(commands.Cog):
 
         rank_name = await get_rank_name_from_discord(member)
 
-        embed = await build_profile_embed(str(member.id))
+        embed = await build_profile_embed(str(member.id), str(guild.id))
         
         # Обновляем поле "Ранг", как у тебя было
         for i, f in enumerate(embed.fields):
@@ -718,9 +730,10 @@ class UserPanel(commands.Cog):
             return
 
         uid = str(interaction.user.id)
-        await ensure_user(uid)
+        gid = str(interaction.guild.id) if interaction.guild else None
+        await ensure_user(uid, gid)
 
-        row = await fetch_one("SELECT static FROM users WHERE discord_id = ?", (uid,))
+        row = await fetch_one("SELECT static FROM users WHERE discord_id = ? AND (? IS NULL OR guild_id = ?)", (uid, gid, gid))
         if row and (row["static"] or "").strip():
             await interaction.response.send_message(
                 "❌ Static уже задан. Если нужно изменить — попроси администратора.",
@@ -728,7 +741,7 @@ class UserPanel(commands.Cog):
             )
             return
 
-        await execute("UPDATE users SET static = ? WHERE discord_id = ?", (static, uid))
+        await execute("UPDATE users SET static = ? WHERE discord_id = ? AND (? IS NULL OR guild_id = ?)", (static, uid, gid, gid))
         await interaction.response.send_message(f"✅ Static сохранён: `{static}`", ephemeral=True)
 
 
@@ -828,10 +841,12 @@ class MainPanelView(View):
             (float(total), report_id)
         )
     
-        embed = await build_bonus_preview_embed(uid, report_id, week_start, week_end, page=0, per_page=10)
+        embed = await build_bonus_preview_embed(uid, report_id, week_start, week_end, page=0, per_page=10,
+                                                guild_id=str(interaction.guild.id) if interaction.guild else None)
         await interaction.edit_original_response(
             embed=embed,
-            view=BonusPreviewPagerView(uid, report_id, week_start, week_end, page=0, per_page=10)
+            view=BonusPreviewPagerView(uid, report_id, week_start, week_end, page=0, per_page=10,
+                                       guild_id=str(interaction.guild.id) if interaction.guild else None)
         )
 
     @discord.ui.button(label="🕓 Личные откаты", style=discord.ButtonStyle.secondary)
@@ -863,7 +878,8 @@ class MainPanelView(View):
     async def my_stats_btn(self, interaction: discord.Interaction, button: Button):
         await interaction.response.defer()
         uid = str(interaction.user.id)
-        embed = await build_stats_embed(uid)
+        _gid = str(interaction.guild.id) if interaction.guild else None
+        embed = await build_stats_embed(uid, _gid)
         await interaction.edit_original_response(embed=embed, view=StatsBackView())
         
 class PromoSubmitView(View):
@@ -898,13 +914,13 @@ class PromoSubmitView(View):
         to_name = rep["to_rank_name"] or "?"
     
         u = await fetch_one(
-            "SELECT family_total, tuning_total, surname_changed FROM users WHERE discord_id = ?",
-            (user_id,),
+            "SELECT family_total, tuning_total, surname_changed FROM users WHERE discord_id = ? AND (? IS NULL OR guild_id = ?)",
+            (user_id, rep.get("guild_id"), rep.get("guild_id")),
         )
         fam = int(u["family_total"] or 0) if u else 0
         tun = int(u["tuning_total"] or 0) if u else 0
         sur = bool(int(u["surname_changed"] or 0)) if u else False
-    
+
         system_type = (rep["system_type"] or "").lower()
         sys_name = "Основная" if system_type == "main" else "Альтернативная"
     
@@ -963,6 +979,10 @@ class PromoSubmitView(View):
 
         s = await fetch_one("SELECT value FROM settings WHERE key = 'promotion_channel_id'", ())
         channel_id = int(s["value"]) if s and s["value"] else None
+        if interaction.guild:
+            _pgch = await get_setting("promo_log_channel_id", str(interaction.guild.id))
+            if _pgch and str(_pgch).strip().isdigit():
+                channel_id = int(str(_pgch).strip())
         if not channel_id:
             return
 
@@ -976,8 +996,8 @@ class PromoSubmitView(View):
         sys_name = "Основная" if system_type == SYSTEM_MAIN else "Альтернативная"
 
         u = await fetch_one(
-            "SELECT family_total, tuning_total, surname_changed FROM users WHERE discord_id = ?",
-            (user_id,),
+            "SELECT family_total, tuning_total, surname_changed FROM users WHERE discord_id = ? AND (? IS NULL OR guild_id = ?)",
+            (user_id, rep.get("guild_id"), rep.get("guild_id")),
         )
         fam = int(u["family_total"] or 0) if u else 0
         tun = int(u["tuning_total"] or 0) if u else 0
@@ -1038,7 +1058,7 @@ class PromoSubmitView(View):
             )
             return
 
-        res = await create_promo_report(uid, SYSTEM_MAIN)
+        res = await create_promo_report(uid, str(interaction.guild.id) if interaction.guild else "", SYSTEM_MAIN)
         if not res["ok"]:
             await interaction.response.edit_message(
                 embed=discord.Embed(title="Ошибка", description=f"❌ {res['reason']}", color=0xE74C3C),
@@ -1048,7 +1068,8 @@ class PromoSubmitView(View):
 
         await self._send_report_to_channel(interaction, res["report_id"], SYSTEM_MAIN)
 
-        embed = await build_profile_embed(uid)
+        _pg3 = str(interaction.guild.id) if interaction.guild else None
+        embed = await build_profile_embed(uid, _pg3)
         await interaction.response.edit_message(embed=embed, view=MainPanelView())
 
     @discord.ui.button(label="Подать (Альтернативная)", style=discord.ButtonStyle.primary)
@@ -1066,7 +1087,7 @@ class PromoSubmitView(View):
             )
             return
 
-        res = await create_promo_report(uid, SYSTEM_ALT)
+        res = await create_promo_report(uid, str(interaction.guild.id) if interaction.guild else "", SYSTEM_ALT)
         if not res["ok"]:
             await interaction.response.edit_message(
                 embed=discord.Embed(title="Ошибка", description=f"❌ {res['reason']}", color=0xE74C3C),
@@ -1076,13 +1097,15 @@ class PromoSubmitView(View):
 
         await self._send_report_to_channel(interaction, res["report_id"], SYSTEM_ALT)
 
-        embed = await build_profile_embed(uid)
+        _pg = str(interaction.guild.id) if interaction.guild else None
+        embed = await build_profile_embed(uid, _pg)
         await interaction.response.edit_message(embed=embed, view=MainPanelView())
 
     @discord.ui.button(label="Назад", style=discord.ButtonStyle.secondary)
     async def back_btn(self, interaction: discord.Interaction, button: Button):
         uid = str(interaction.user.id)
-        embed = await build_profile_embed(uid)
+        _pg2 = str(interaction.guild.id) if interaction.guild else None
+        embed = await build_profile_embed(uid, _pg2)
         await interaction.response.edit_message(embed=embed, view=MainPanelView())
 
 

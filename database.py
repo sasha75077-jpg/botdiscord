@@ -110,6 +110,32 @@ async def migrate_db():
         except Exception as e:
             print(f"⚠️  permissions migrate: {e}")
 
+        # users: раздельные строки на сервер (UNIQUE discord_id+guild_id)
+        try:
+            async with db.execute("SELECT sql FROM sqlite_master WHERE name='users'") as cursor:
+                urow = await cursor.fetchone()
+            if urow and "UNIQUE(discord_id, guild_id)" not in (urow[0] or '').replace(" ", "").replace("\n", ""):
+                await db.execute("""CREATE TABLE users_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    discord_id TEXT NOT NULL,
+                    guild_id TEXT NOT NULL DEFAULT '',
+                    current_rank_id INTEGER,
+                    surname_changed INTEGER DEFAULT 0,
+                    family_total INTEGER DEFAULT 0,
+                    tuning_total INTEGER DEFAULT 0,
+                    static TEXT,
+                    UNIQUE(discord_id, guild_id))""")
+                await db.execute(
+                    "INSERT INTO users_new (discord_id, guild_id, current_rank_id, surname_changed,"
+                    " family_total, tuning_total, static)"
+                    " SELECT discord_id, COALESCE(guild_id, '880440495233454080'),"
+                    " current_rank_id, surname_changed, family_total, tuning_total, static FROM users")
+                await db.execute("DROP TABLE users")
+                await db.execute("ALTER TABLE users_new RENAME TO users")
+                print("✅ users: разделение по серверам")
+        except Exception as e:
+            print(f"⚠️  users migrate: {e}")
+
         # взятие и напоминания
         for ddl in (
             "ALTER TABLE contracts ADD COLUMN claimed_by TEXT",
@@ -118,6 +144,7 @@ async def migrate_db():
             "ALTER TABLE applications ADD COLUMN nudged_at TEXT",
             "ALTER TABLE bonus_reports ADD COLUMN site_id INTEGER",
             "ALTER TABLE promotion_reports ADD COLUMN guild_id TEXT",
+            "ALTER TABLE promo_credits ADD COLUMN guild_id TEXT",
         ):
             try:
                 await db.execute(ddl)
