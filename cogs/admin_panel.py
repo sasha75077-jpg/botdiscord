@@ -2785,13 +2785,24 @@ class AdminHubView(discord.ui.View):
         super().__init__(timeout=None)
 
     async def has_admin_roles(self, member: discord.Member) -> bool:
-        """Проверяет, есть ли у member роли из admin_role_ids"""
+        """Админ: Discord-админ, legacy admin_role_ids или панельная роль admin/owner."""
+        if member.guild_permissions.administrator:
+            return True
         role_ids = await get_admin_role_ids()  # твоя функция из services
-        if not role_ids:
-            return False
-        
-        member_roles = {role.id for role in member.roles}
-        return bool(member_roles & set(role_ids))
+        if role_ids:
+            member_roles = {role.id for role in member.roles}
+            if bool(member_roles & set(role_ids)):
+                return True
+        try:
+            row = await fetch_one(
+                "SELECT role FROM permissions WHERE guild_id = ? AND discord_id = ?",
+                (str(member.guild.id), str(member.id)),
+            )
+            if row and row.get("role") in ("admin", "owner"):
+                return True
+        except Exception:
+            pass
+        return False
 
     @discord.ui.button(
         label="🔧 Открыть админ-панель",

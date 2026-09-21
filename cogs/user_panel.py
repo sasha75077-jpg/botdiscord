@@ -403,8 +403,9 @@ def build_promo_embed(rep: dict) -> discord.Embed:
 
 
 
-async def build_profile_embed(user_id: str) -> discord.Embed:
-    await ensure_user(user_id)
+async def build_profile_embed(user_id: str, guild_id: str | None = None) -> discord.Embed:
+    if guild_id:
+        await ensure_user(user_id, guild_id)
 
     row = await fetch_one(
         """

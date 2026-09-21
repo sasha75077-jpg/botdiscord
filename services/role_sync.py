@@ -463,24 +463,6 @@ async def push_users(guild_id: str):
         return 0
 
 
-def _api_post(path, payload):
-    import urllib.request as _u
-    import json as _j
-    import os as _o
-    key = _o.getenv("PANEL_SYNC_SECRET", "")
-    if not key:
-        return
-    req = _u.Request(
-        API_URL + path,
-        data=_j.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}",
-                 "User-Agent": BROWSER_UA},
-        method="POST",
-    )
-    with _u.urlopen(req, timeout=30) as r:
-        r.read()
-
-
 async def pull_ranks(guild_id: str):
     """Лестница рангов и требования с сайта в локальную БД (полная замена)."""
     if not SYNC_SECRET:
