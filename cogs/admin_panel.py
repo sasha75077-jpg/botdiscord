@@ -2502,14 +2502,15 @@ class AdminPanel(commands.Cog):
     @app_commands.guilds(*GUILD_OBJECTS)
     @admin_roles_check(get_setting)
     async def pending_now(self, interaction: discord.Interaction):
+        _gid = str(interaction.guild.id) if interaction.guild else None
         row = await fetch_one(
-            "SELECT COUNT(*) AS cnt FROM contracts WHERE confirm_status='PENDING'",
-            ()
+            "SELECT COUNT(*) AS cnt FROM contracts WHERE confirm_status='PENDING' AND (? IS NULL OR guild_id = ?)",
+            (_gid, _gid)
         )
         cnt = int(row["cnt"] or 0)
 
         content = f"⏳ Не рассмотренных контрактов: {cnt}"
-        await upsert_pending_counter_message(self.bot, content)
+        await upsert_pending_counter_message(self.bot, content, _gid or "")
 
         await interaction.response.send_message("✅ Счётчик обновлён.", ephemeral=True)
 
@@ -3421,12 +3422,9 @@ async def mark_contract_message(client, channel_id, message_id, accepted: bool, 
         emb = msg.embeds[0] if msg.embeds else discord.Embed(title=title)
         emb.color = 0x2ECC71 if accepted else 0xE74C3C
         emb.add_field(name="Статус", value="✅ Принят" if accepted else "❌ Отклонен", inline=False)
+        if decider_id:
+            emb.add_field(name="Решение", value=f"<@{decider_id}> (`{decider_id}`)", inline=False)
         await msg.edit(embed=emb, view=None)
-        try:
-            who = f"<@{decider_id}>" if decider_id else ""
-            await ch.send(f"{'Одобрен' if accepted else 'Отклонен'}: {who}".strip())
-        except Exception:
-            pass
         return True
     except Exception as e:
         print(f"[contract-mark] warn: {e}")
@@ -3490,9 +3488,13 @@ async def approve_contract(interaction: discord.Interaction, contract_id: int):
         print(f"[api_sync] warn: {e}")
 
     # 1.1) обновляем счётчик ожидания
-    row = await fetch_one("SELECT COUNT(*) AS cnt FROM contracts WHERE confirm_status='PENDING'", ())
+    row = await fetch_one(
+        "SELECT COUNT(*) AS cnt FROM contracts WHERE confirm_status='PENDING' AND (? IS NULL OR guild_id = ?)",
+        (contract.get("guild_id"), contract.get("guild_id")))
     cnt = int(row["cnt"] or 0)
-    await upsert_pending_counter_message(interaction.client, f"⏳ Ожидание проверки контрактов: {cnt}")
+    await upsert_pending_counter_message(
+        interaction.client, f"⏳ Ожидание проверки контрактов: {cnt}",
+        str(interaction.guild.id) if interaction.guild else (contract.get("guild_id") or ""))
 
     # 2) ensure user
     _ag = str(interaction.guild.id) if interaction.guild else (contract.get("guild_id") or "")
@@ -3659,9 +3661,13 @@ class RejectReasonModal(Modal, title="Причина отклонения"):
         except Exception as e:
             print(f"[api_sync] warn: {e}")
 
-        row = await fetch_one("SELECT COUNT(*) AS cnt FROM contracts WHERE confirm_status='PENDING'", ())
+        row = await fetch_one(
+            "SELECT COUNT(*) AS cnt FROM contracts WHERE confirm_status='PENDING' AND (? IS NULL OR guild_id = ?)",
+            (contract.get("guild_id"), contract.get("guild_id")))
         cnt = int(row["cnt"] or 0)
-        await upsert_pending_counter_message(interaction.client, f"⏳ Ожидание проверки контрактов: {cnt}")
+        await upsert_pending_counter_message(
+            interaction.client, f"⏳ Ожидание проверки контрактов: {cnt}",
+            str(interaction.guild.id) if interaction.guild else (contract.get("guild_id") or ""))
 
         discord_id = contract["discord_id"]
         contract_type = contract["contract_type"]

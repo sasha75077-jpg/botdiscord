@@ -186,7 +186,7 @@ contracts.post('/:guildId/contracts/', async (c) => {
         { name: 'Цена', value: String(price ?? 0), inline: false },
         { name: 'Статик #', value: String(staticRow?.static || '—'), inline: false },
         { name: 'Username', value: String((discordUser as any)?.username || nickname || who.discord_id), inline: true },
-        { name: 'TAG', value: pings || '—', inline: true },
+        { name: 'TAG', value: `<@${who.discord_id}>`, inline: true },
         { name: 'ID', value: String(who.discord_id), inline: true },
       ],
     }
@@ -194,7 +194,7 @@ contracts.post('/:guildId/contracts/', async (c) => {
       reportEmbed.fields.splice(1, 0, { name: 'Сдача', value: String(nickname), inline: false })
     }
     fd.append('payload_json', JSON.stringify({
-      content: `${pings ? pings + '\n' : ''}Контракт ${contractType} от <@${who.discord_id}> (сайт)`,
+      content: pings || undefined,
       embeds: [reportEmbed],
     }))
     files.forEach((f, i) => fd.append(`files[${i}]`, f, f.name))
