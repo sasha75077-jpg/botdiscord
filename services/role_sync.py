@@ -284,8 +284,10 @@ async def reconcile_guild(bot, guild):
 SITE_TO_LOCAL_STATUS = {"pending": "PENDING", "approved": "APPROVED", "rejected": "REJECTED"}
 
 
-async def poll_site_bonus():
+async def poll_site_bonus(bot=None):
     """Забрать премии с сайта в локальную БД (черновики)."""
+    global _POLL_BOT
+    _POLL_BOT = bot
     if not SYNC_SECRET:
         return
     try:
@@ -323,6 +325,8 @@ async def _poll_guild_bonus(guild_id: str):
                 continue
             week = str(r.get("reason") or "")
             ws, we = (week.split("..") + ["", ""])[:2]
+            if not ws:
+                ws, we = (r.get("week_start") or ""), (r.get("week_end") or "")
             await execute(
                 """INSERT INTO bonus_reports
                    (guild_id, discord_id, week_start, week_end, total_amount,
@@ -332,10 +336,49 @@ async def _poll_guild_bonus(guild_id: str):
                  ws, we, float(r.get("amount") or 0),
                  r.get("contracts_json") or "[]", r["id"]),
             )
+            rep = await fetch_one(
+                "SELECT report_id FROM bonus_reports WHERE site_id = ?", (r["id"],))
+            if rep:
+                await _post_bonus_panel(_POLL_BOT, guild_id, int(rep["report_id"]),
+                                        str(r.get("recipient_discord_id") or r.get("discord_id")),
+                                        ws, we)
         except Exception as e:
             print(f"[bonus-poll] warn row: {e}")
     if newest != cursor:
         await set_setting("bonus_poll_cursor", newest, guild_id)
+
+
+_POLL_BOT = None
+
+
+async def _post_bonus_panel(bot, guild_id: str, report_id: int, discord_id: str,
+                            week_start: str, week_end: str):
+    """Панелька премии с сайта в бонус-канал + кнопки."""
+    if bot is None:
+        return
+    try:
+        from cogs.admin_panel import BonusActionView
+        guild = bot.get_guild(int(guild_id))
+        if guild is None:
+            return
+        ch_id = await get_setting("bonus_log_channel_id", guild_id)
+        if not ch_id:
+            ch_id = await get_setting("bonus_channel_id")
+        if not ch_id:
+            return
+        channel = guild.get_channel(int(ch_id))
+        if channel is None:
+            try:
+                channel = await guild.fetch_channel(int(ch_id))
+            except Exception:
+                return
+        embed = discord.Embed(title=f"💰 Премия #{report_id} (с сайта)", color=0x9B59B6)
+        embed.add_field(name="Пользователь", value=f"<@{discord_id}>", inline=True)
+        embed.add_field(name="Неделя", value=f"{week_start} — {week_end}", inline=True)
+        embed.add_field(name="Сайт", value=f"https://botdiscord-87a.pages.dev/reports", inline=False)
+        await channel.send(embed=embed, view=BonusActionView(report_id))
+    except Exception as e:
+        print(f"[bonus-poll] warn panel: {e}")
 
 
 async def push_users(guild_id: str):
@@ -514,7 +557,7 @@ async def _mirror_site_contract(bot, guild_id: str, r: dict):
             )
         except Exception:
             pass
-        await _post_contract_log(bot, guild_id, r)
+        await _post_contract_review(bot, guild_id, r)
         return
     updates = []
     if (local.get("confirm_status") or "PENDING") == "PENDING" and want != "PENDING":
@@ -532,8 +575,74 @@ async def _mirror_site_contract(bot, guild_id: str, r: dict):
         await _reply_contract_decision(bot, guild_id, r, want)
 
 
+async def _post_contract_review(bot, guild_id: str, r: dict):
+    """Карточка контракта с сайта в канале + кнопки Принять/Отклонить."""
+    if bot is None:
+        return
+    try:
+        from cogs.admin_panel import ContractActionView
+    except Exception as e:
+        print(f"[contracts-log] warn import view: {e}")
+        return
+    try:
+        guild = bot.get_guild(int(guild_id))
+        if guild is None:
+            return
+        local = await fetch_one("SELECT * FROM contracts WHERE site_id = ?", (r.get("id"),))
+        if not local:
+            return
+        details = r.get("details")
+        if isinstance(details, str):
+            try:
+                details = json.loads(details)
+            except Exception:
+                details = {}
+        details = details or {}
+        upload = details.get("upload") or {}
+        ch_id = upload.get("channel_id")
+        if not ch_id:
+            cfg = await fetch_all(
+                "SELECT setting_value FROM guild_settings WHERE guild_id = ? AND setting_key IN ('contracts_upload_channel_id', 'contracts_log_channel_id')",
+                (str(guild_id),),
+            )
+            for row in cfg:
+                if (row["setting_value"] or "").strip().isdigit():
+                    ch_id = row["setting_value"].strip()
+                    break
+        if not ch_id:
+            return
+        channel = guild.get_channel(int(ch_id))
+        if channel is None:
+            try:
+                channel = await guild.fetch_channel(int(ch_id))
+            except Exception:
+                return
+        embed = discord.Embed(title=f"📄 Контракт #{local['id']} (с сайта)", color=0x3498DB)
+        embed.add_field(name="Тип", value=str(r.get("contract_type")), inline=True)
+        embed.add_field(name="Пользователь", value=f"<@{r.get('discord_id')}>", inline=True)
+        if r.get("price"):
+            embed.add_field(name="Сумма", value=str(r.get("price")), inline=True)
+        for k, v in details.items():
+            if k in ("attachments", "upload"):
+                continue
+            embed.add_field(name=str(k), value=str(v)[:1024], inline=False)
+        atts = details.get("attachments") or []
+        if atts:
+            embed.set_image(url=atts[0])
+            if len(atts) > 1:
+                embed.add_field(
+                    name="📎 Еще скрины",
+                    value="\n".join(f"[Скриншот {i+1}]({u})" for i, u in enumerate(atts[1:][:5])),
+                    inline=False,
+                )
+        embed.add_field(
+            name="Сайт", value=f"https://botdiscord-87a.pages.dev/contracts/{r.get('id')}", inline=False)
+        await channel.send(embed=embed, view=ContractActionView(int(local["id"])))
+    except Exception as e:
+        print(f"[contracts-log] warn: {e}")
+
+
 async def _reply_contract_decision(bot, guild_id: str, r: dict, decision: str):
-    """Решение по контракту с сайта - ответом в то же сообщение подачи."""
     if bot is None:
         return
     try:

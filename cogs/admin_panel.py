@@ -3260,18 +3260,37 @@ async def show_contract_detail(interaction: discord.Interaction, contract_id: in
 
 
 class ContractActionView(View):
-    def __init__(self, contract_id: int, return_page: int = 0):
-        super().__init__(timeout=300)
+    def __init__(self, contract_id: int = 0, return_page: int = 0):
+        super().__init__(timeout=None)
         self.contract_id = contract_id
         self.return_page = return_page
 
+    def _resolve_id(self, interaction: discord.Interaction) -> int:
+        if self.contract_id:
+            return int(self.contract_id)
+        try:
+            title = (interaction.message.embeds[0].title if interaction.message and interaction.message.embeds else "") or ""
+            import re as _re
+            m = _re.search(r"#(\d+)", title)
+            if m:
+                return int(m.group(1))
+        except Exception:
+            pass
+        return 0
+
     @discord.ui.button(label="✅ Принять", style=discord.ButtonStyle.success, custom_id="approve_contract")
     async def approve_btn(self, interaction: discord.Interaction, button: Button):
-        await approve_contract(interaction, self.contract_id)
+        rid = self._resolve_id(interaction)
+        if not rid:
+            return await interaction.response.send_message("❌ Не нашел контракт.", ephemeral=True)
+        await approve_contract(interaction, rid)
 
     @discord.ui.button(label="❌ Отклонить", style=discord.ButtonStyle.danger, custom_id="reject_contract")
     async def reject_btn(self, interaction: discord.Interaction, button: Button):
-        modal = RejectReasonModal(self.contract_id)
+        rid = self._resolve_id(interaction)
+        if not rid:
+            return await interaction.response.send_message("❌ Не нашел контракт.", ephemeral=True)
+        modal = RejectReasonModal(rid)
         await interaction.response.send_modal(modal)
 
     @discord.ui.button(label="⬅️ Назад", style=discord.ButtonStyle.secondary, custom_id="back_to_list")
@@ -4430,3 +4449,4 @@ ADMIN_PANEL_MSG_KEY = "admin_panel_message_id"
 async def setup(bot: commands.Bot):
     await bot.add_cog(AdminPanel(bot))
     bot.add_view(BonusActionView(0))
+    bot.add_view(ContractActionView(0))

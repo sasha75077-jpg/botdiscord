@@ -19,6 +19,7 @@ export default function NotificationsPage() {
   const [pricesChannel, setPricesChannel] = useState('');
   const [uploadChannel, setUploadChannel] = useState('');
   const [appsChannel, setAppsChannel] = useState('');
+  const [bonusChannel, setBonusChannel] = useState('');
   const [pingIds, setPingIds] = useState<string[]>([]);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -44,6 +45,7 @@ export default function NotificationsPage() {
     setPricesChannel(s.prices_panel_channel_id || '');
     setUploadChannel(s.contracts_upload_channel_id || '');
     setAppsChannel(s.applications_log_channel_id || '');
+    setBonusChannel(s.bonus_log_channel_id || '');
     setPingIds(String(s.contracts_ping_role_ids || '').split(',').map((x: string) => x.trim()).filter(Boolean));
   }, [settings]);
 
@@ -54,6 +56,7 @@ export default function NotificationsPage() {
         prices_panel_channel_id: pricesChannel,
         contracts_upload_channel_id: uploadChannel,
         applications_log_channel_id: appsChannel,
+        bonus_log_channel_id: bonusChannel,
         contracts_ping_role_ids: pingIds.join(','),
       }),
     onSuccess: () => {
@@ -123,6 +126,20 @@ export default function NotificationsPage() {
         </p>
         <label className="block text-sm font-medium mb-2">Канал</label>
         <select value={appsChannel} onChange={(e) => setAppsChannel(e.target.value)} className="input w-full max-w-md">
+          <option value="">— не выбран —</option>
+          {channels.map((ch: any) => (
+            <option key={ch.id} value={ch.id}># {ch.name}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="card">
+        <h2 className="text-xl font-bold mb-1">Канал премий</h2>
+        <p className="text-sm text-gray-500 mb-3">
+          Сюда бот постит премии, поданные с сайта, с кнопками принятия.
+        </p>
+        <label className="block text-sm font-medium mb-2">Канал</label>
+        <select value={bonusChannel} onChange={(e) => setBonusChannel(e.target.value)} className="input w-full max-w-md">
           <option value="">— не выбран —</option>
           {channels.map((ch: any) => (
             <option key={ch.id} value={ch.id}># {ch.name}</option>
