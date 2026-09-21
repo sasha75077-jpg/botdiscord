@@ -666,13 +666,13 @@ async def _mirror_site_contract(bot, guild_id: str, r: dict):
 
 
 async def _post_contract_review(bot, guild_id: str, r: dict):
-    """Отдельное компактное сообщение-ревью: пинги + эмбед 'Контракт #N' + кнопки."""
+    """Кнопки на сообщение отчета (то же сообщение со скринами, дублей нет)."""
     if bot is None:
         return
     try:
         local = await fetch_one("SELECT * FROM contracts WHERE site_id = ?", (r.get("id"),))
         if not local or local.get("discord_message_id"):
-            return  # уже есть ревью
+            return  # кнопки уже цеплять некуда/нечего
         from cogs.admin_panel import ContractActionView
     except Exception as e:
         print(f"[contracts-log] warn import view: {e}")
@@ -681,13 +681,15 @@ async def _post_contract_review(bot, guild_id: str, r: dict):
         guild = bot.get_guild(int(guild_id))
         if guild is None:
             return
-        cfg = await fetch_all(
-            "SELECT setting_key, setting_value FROM guild_settings WHERE guild_id = ? AND setting_key IN ('contracts_upload_channel_id', 'contracts_log_channel_id', 'contracts_ping_role_ids')",
-            (str(guild_id),),
-        )
-        cfg_map = {x["setting_key"]: x["setting_value"] for x in cfg}
-        ch_id = (cfg_map.get("contracts_upload_channel_id") or cfg_map.get("contracts_log_channel_id") or "").strip()
-        if not ch_id or not ch_id.isdigit():
+        details = r.get("details")
+        if isinstance(details, str):
+            try:
+                details = json.loads(details)
+            except Exception:
+                details = {}
+        upload = (details or {}).get("upload") or {}
+        ch_id, msg_id = upload.get("channel_id"), upload.get("message_id")
+        if not ch_id or not msg_id:
             return
         channel = guild.get_channel(int(ch_id))
         if channel is None:
@@ -695,17 +697,11 @@ async def _post_contract_review(bot, guild_id: str, r: dict):
                 channel = await guild.fetch_channel(int(ch_id))
             except Exception:
                 return
-        ping_ids = [x.strip() for x in (cfg_map.get("contracts_ping_role_ids") or "").split(",") if x.strip().isdigit()]
-        pings = " ".join(f"<@&{pid}>" for pid in ping_ids)
-        embed = discord.Embed(title=f"📄 Контракт #{r.get('id')}", color=0x3498DB)
-        embed.add_field(name="Тип", value=str(r.get("contract_type")), inline=True)
-        embed.add_field(name="Пользователь", value=f"<@{r.get('discord_id')}>", inline=True)
-        if r.get("price"):
-            embed.add_field(name="Сумма", value=str(r.get("price")), inline=True)
-        embed.add_field(
-            name="Сайт", value=f"https://botdiscord-87a.pages.dev/contracts/{r.get('id')}", inline=False)
-        view = ContractActionView(int(local["id"]))
-        msg = await channel.send(content=pings or None, embed=embed, view=view)
+        try:
+            msg = await channel.fetch_message(int(msg_id))
+        except Exception:
+            return
+        await msg.edit(view=ContractActionView(int(local["id"])))
         await execute(
             "UPDATE contracts SET channel_id = ?, discord_message_id = ? WHERE id = ?",
             (str(channel.id), str(msg.id), local["id"]),
@@ -725,6 +721,7 @@ async def _reply_contract_decision(bot, guild_id: str, r: dict, decision: str):
         from cogs.admin_panel import mark_contract_message
         await mark_contract_message(
             bot, local.get("channel_id"), local.get("discord_message_id"),
-            decision == "APPROVED", f"Контракт #{r.get('id')}")
+            decision == "APPROVED", f"Контракт #{r.get('id')}",
+            decider_id=r.get("decided_by"))
     except Exception as e:
         print(f"[contracts-log] warn: {e}")

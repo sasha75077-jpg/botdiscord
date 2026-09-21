@@ -3403,7 +3403,7 @@ PROMO_EXCLUDED_TYPES = {
     "агитации wn",
 }
 
-async def mark_contract_message(client, channel_id, message_id, accepted: bool, title: str):
+async def mark_contract_message(client, channel_id, message_id, accepted: bool, title: str, decider_id=None):
     """Проставить статус на сообщении ревью (embed + снять кнопки)."""
     try:
         if not channel_id or not message_id:
@@ -3422,6 +3422,11 @@ async def mark_contract_message(client, channel_id, message_id, accepted: bool, 
         emb.color = 0x2ECC71 if accepted else 0xE74C3C
         emb.add_field(name="Статус", value="✅ Принят" if accepted else "❌ Отклонен", inline=False)
         await msg.edit(embed=emb, view=None)
+        try:
+            who = f"<@{decider_id}>" if decider_id else ""
+            await ch.send(f"{'Одобрен' if accepted else 'Отклонен'}: {who}".strip())
+        except Exception:
+            pass
         return True
     except Exception as e:
         print(f"[contract-mark] warn: {e}")
@@ -3469,7 +3474,7 @@ async def approve_contract(interaction: discord.Interaction, contract_id: int):
         if _review and _review.get("site_id") and _review.get("discord_message_id"):
             await mark_contract_message(
                 interaction.client, _review["channel_id"], _review["discord_message_id"],
-                True, f"Контракт #{contract_id}")
+                True, f"Контракт #{contract_id}", decider_id=str(interaction.user.id))
     except Exception as e:
         print(f"[contract-mark] warn: {e}")
 
@@ -3639,7 +3644,7 @@ class RejectReasonModal(Modal, title="Причина отклонения"):
             if _review and _review.get("site_id") and _review.get("discord_message_id"):
                 await mark_contract_message(
                     interaction.client, _review["channel_id"], _review["discord_message_id"],
-                    False, f"Контракт #{self.contract_id}")
+                    False, f"Контракт #{self.contract_id}", decider_id=str(interaction.user.id))
         except Exception as e:
             print(f"[contract-mark] warn: {e}")
 

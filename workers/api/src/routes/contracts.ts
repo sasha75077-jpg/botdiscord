@@ -168,7 +168,35 @@ contracts.post('/:guildId/contracts/', async (c) => {
     ).bind(guildId).first<{ setting_value: string }>()
     const pingIds = (pingRow?.setting_value || '').split(',').map((s) => s.trim()).filter(Boolean)
     const pings = pingIds.map((id) => `<@&${id}>`).join(' ')
-    fd.append('content', `${pings ? pings + '\n' : ''}Контракт ${contractType} от <@${who.discord_id}> (сайт)`)
+    // Карточка отчета одним сообщением со скринами (кнопки цепляет бот)
+    const [staticRow, discordUser] = await Promise.all([
+      c.env.DB.prepare(
+        'SELECT static FROM users WHERE discord_id = ? AND guild_id = ?'
+      ).bind(who.discord_id, guildId).first<{ static: string }>(),
+      fetch(`${c.env.DISCORD_API_ENDPOINT}/users/${who.discord_id}`, {
+        headers: { Authorization: `Bot ${c.env.DISCORD_BOT_TOKEN}` },
+      }).then((r) => (r.ok ? r.json() : null)).catch(() => null) as Promise<{ username?: string } | null>,
+    ])
+    const reportEmbed: any = {
+      title: 'Отчет по контракту',
+      color: 0x2e86de,
+      timestamp: new Date().toISOString(),
+      fields: [
+        { name: 'Контракт', value: String(contractType), inline: false },
+        { name: 'Цена', value: String(price ?? 0), inline: false },
+        { name: 'Статик #', value: String(staticRow?.static || '—'), inline: false },
+        { name: 'Username', value: String((discordUser as any)?.username || nickname || who.discord_id), inline: true },
+        { name: 'TAG', value: pings || '—', inline: true },
+        { name: 'ID', value: String(who.discord_id), inline: true },
+      ],
+    }
+    if (nickname && nickname !== who.discord_id) {
+      reportEmbed.fields.splice(1, 0, { name: 'Сдача', value: String(nickname), inline: false })
+    }
+    fd.append('payload_json', JSON.stringify({
+      content: `${pings ? pings + '\n' : ''}Контракт ${contractType} от <@${who.discord_id}> (сайт)`,
+      embeds: [reportEmbed],
+    }))
     files.forEach((f, i) => fd.append(`files[${i}]`, f, f.name))
     const up = await fetch(`${c.env.DISCORD_API_ENDPOINT}/channels/${channelId}/messages`, {
       method: 'POST',
