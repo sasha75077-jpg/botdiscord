@@ -347,12 +347,25 @@ auth.post('/switch', async (c) => {
 
   const discordId = payload.discord_id as string
 
-  // Проверка членства: строка в users или permissions (данные от бота)
+  // Проверка членства: строка в users/permissions ИЛИ живой состав Discord
+  let isMember = false
   const member = await c.env.DB.prepare(
     'SELECT 1 FROM users WHERE discord_id = ? AND guild_id = ? UNION SELECT 1 FROM permissions WHERE discord_id = ? AND guild_id = ? LIMIT 1'
   ).bind(discordId, guild_id, discordId, guild_id).first()
-
-  if (!member) {
+  if (member) {
+    isMember = true
+  } else if (c.env.DISCORD_BOT_TOKEN) {
+    try {
+      const mresp = await fetch(
+        `${c.env.DISCORD_API_ENDPOINT}/guilds/${guild_id}/members/${discordId}`,
+        { headers: { Authorization: `Bot ${c.env.DISCORD_BOT_TOKEN}` } }
+      )
+      isMember = mresp.ok
+    } catch {
+      isMember = false
+    }
+  }
+  if (!isMember) {
     return c.json({ error: 'You are not a member of this guild' }, 403)
   }
 
