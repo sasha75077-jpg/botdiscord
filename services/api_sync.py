@@ -10,6 +10,16 @@ import urllib.request
 
 API_URL = os.getenv("PANEL_API_URL", "https://melancholia-api.sasha75077.workers.dev").rstrip("/")
 SYNC_SECRET = os.getenv("PANEL_SYNC_SECRET", "")
+# Cloudflare режет дефолтный Python-UA (1010) - маскируемся под браузер
+BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+
+
+def _headers():
+    return {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {SYNC_SECRET}",
+        "User-Agent": BROWSER_UA,
+    }
 
 
 def _post(path: str, payload: dict, method: str = "POST"):
@@ -19,10 +29,7 @@ def _post(path: str, payload: dict, method: str = "POST"):
         req = urllib.request.Request(
             API_URL + path,
             data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {SYNC_SECRET}",
-            },
+            headers=_headers(),
             method=method,
         )
         with urllib.request.urlopen(req, timeout=10) as r:

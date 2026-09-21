@@ -21,6 +21,7 @@ from database import execute, fetch_all, fetch_one, get_setting, set_setting
 
 API_URL = os.getenv("PANEL_API_URL", "https://melancholia-api.sasha75077.workers.dev").rstrip("/")
 SYNC_SECRET = os.getenv("PANEL_SYNC_SECRET", "")
+BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 
 ADMIN_KEY = "panel_admin_role_ids"
 RECRUIT_KEY = "panel_recruiter_role_ids"
@@ -32,7 +33,8 @@ def _parse_ids(s):
 
 
 def _api_get(path):
-    req = urllib.request.Request(API_URL + path, method="GET")
+    req = urllib.request.Request(API_URL + path, method="GET",
+                                 headers={"User-Agent": BROWSER_UA})
     with urllib.request.urlopen(req, timeout=10) as r:
         return json.loads(r.read().decode("utf-8"))
 
@@ -43,7 +45,8 @@ def _api_post(path, payload):
     req = urllib.request.Request(
         API_URL + path,
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {SYNC_SECRET}"},
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {SYNC_SECRET}",
+                 "User-Agent": BROWSER_UA},
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=10) as r:
@@ -55,7 +58,7 @@ def _api_delete(path):
         return
     req = urllib.request.Request(
         API_URL + path,
-        headers={"Authorization": f"Bearer {SYNC_SECRET}"},
+        headers={"Authorization": f"Bearer {SYNC_SECRET}", "User-Agent": BROWSER_UA},
         method="DELETE",
     )
     with urllib.request.urlopen(req, timeout=10) as r:
@@ -365,7 +368,8 @@ def _api_post(path, payload):
     req = _u.Request(
         API_URL + path,
         data=_j.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}",
+                 "User-Agent": BROWSER_UA},
         method="POST",
     )
     with _u.urlopen(req, timeout=30) as r:

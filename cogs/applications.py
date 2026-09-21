@@ -51,7 +51,8 @@ def _api_req(method, path, payload=None):
     req = urllib.request.Request(
         PANEL_API_URL + path,
         data=data,
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}",
+                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
         method=method,
     )
     with urllib.request.urlopen(req, timeout=15) as r:

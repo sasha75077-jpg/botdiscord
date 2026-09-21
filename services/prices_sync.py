@@ -11,7 +11,8 @@ def _api(method, path, payload=None):
     req = urllib.request.Request(
         API_URL + path,
         data=json.dumps(payload).encode("utf-8") if payload is not None else None,
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {SYNC_SECRET}"},
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {SYNC_SECRET}",
+                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
         method=method,
     )
     with urllib.request.urlopen(req, timeout=15) as r:
