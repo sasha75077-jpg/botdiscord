@@ -246,11 +246,38 @@ export default function ContractForm({ guildId, onSuccess, restrictedToAgitation
     </div>
   );
 
-  const fileBox = (slot: string, title: string) => (
-    <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-4 text-center">
+  const fileBox = (slot: string, title: string) => {
+    const onPaste = (e: React.ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const imgs: File[] = [];
+      for (const it of Array.from(items)) {
+        if (it.type.startsWith('image/')) {
+          const f = it.getAsFile();
+          if (f) imgs.push(f);
+        }
+      }
+      if (imgs.length === 0) return;
+      e.preventDefault();
+      const mapped: FileItem[] = [];
+      for (const f of imgs) {
+        if (f.size > MAX_FILE) {
+          setError(`Файл ${f.name} больше 8 МБ`);
+          continue;
+        }
+        mapped.push({ file: f, preview: URL.createObjectURL(f), slot });
+      }
+      setFiles((prev) => [...prev, ...mapped].slice(0, 10));
+    };
+    return (
+    <div
+      onPaste={onPaste}
+      className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-4 text-center"
+    >
       <p className="text-sm font-medium mb-2">{title}</p>
       <label className="cursor-pointer">
         <span className="text-primary-600 dark:text-primary-400 hover:underline text-sm">Выбрать файлы</span>
+        <span className="text-gray-500 text-sm"> или вставь картинку из буфера (Ctrl+V)</span>
         <input type="file" accept="image/*" multiple onChange={(e) => addFiles(e.target.files, slot)} className="hidden" />
       </label>
       <div className="flex flex-wrap gap-2 justify-center mt-2">
@@ -266,6 +293,7 @@ export default function ContractForm({ guildId, onSuccess, restrictedToAgitation
       </div>
     </div>
   );
+  };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
