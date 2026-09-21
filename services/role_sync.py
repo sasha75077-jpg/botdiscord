@@ -33,8 +33,10 @@ def _parse_ids(s):
 
 
 def _api_get(path):
-    req = urllib.request.Request(API_URL + path, method="GET",
-                                 headers={"User-Agent": BROWSER_UA})
+    headers = {"User-Agent": BROWSER_UA}
+    if SYNC_SECRET:
+        headers["Authorization"] = f"Bearer {SYNC_SECRET}"
+    req = urllib.request.Request(API_URL + path, method="GET", headers=headers)
     with urllib.request.urlopen(req, timeout=10) as r:
         return json.loads(r.read().decode("utf-8"))
 
