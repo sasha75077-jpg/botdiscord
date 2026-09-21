@@ -87,6 +87,7 @@ export const guildsApi = {
       params: { is_enabled: isEnabled },
     }),
   discordRoles: (guildId: string) => api.get(`/guilds/${guildId}/discord-roles`),
+  leaderboard: (guildId: string) => api.get(`/guilds/${guildId}/leaderboard`),
   family: (guildId: string) => api.get(`/guilds/${guildId}/family`),
   dashboard: (guildId: string) => api.get(`/guilds/${guildId}/dashboard`),
   discordChannels: (guildId: string) => api.get(`/guilds/${guildId}/discord-channels`),

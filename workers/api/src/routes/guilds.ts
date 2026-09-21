@@ -411,4 +411,109 @@ guilds.get('/:guildId/family', async (c) => {
   })
 })
 
+// GET /guilds/:guildId/leaderboard - таблица семьи: контракты и прогресс (все участники сервера)
+guilds.get('/:guildId/leaderboard', async (c) => {
+  const header = c.req.header('Authorization')
+  if (!header?.startsWith('Bearer ')) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+  const payload: any = await verifyToken(header.substring(7), c.env.SECRET_KEY)
+  if (!payload?.discord_id) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+  const guildId = c.req.param('guildId')
+  if (payload.user_type !== 'owner' && payload.guild_id !== guildId) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+
+  const famRow = await c.env.DB.prepare(
+    "SELECT setting_value FROM guild_settings WHERE guild_id = ? AND setting_key = 'family_member_role_ids'"
+  ).bind(guildId).first<{ setting_value: string }>()
+  const famIds = (famRow?.setting_value || '').split(',').map((s) => s.trim()).filter(Boolean)
+  if (famIds.length === 0 || !c.env.DISCORD_BOT_TOKEN) {
+    return c.json({ error: 'Не настроены семейные роли' }, 400)
+  }
+
+  const resp = await fetch(
+    `${c.env.DISCORD_API_ENDPOINT}/guilds/${guildId}/members?limit=1000`,
+    { headers: { Authorization: `Bot ${c.env.DISCORD_BOT_TOKEN}` } }
+  )
+  if (!resp.ok) {
+    return c.json({ error: 'Failed to fetch members' }, 502)
+  }
+  const members = await resp.json<Array<{
+    user: { id: string; username: string; avatar: string | null };
+    roles: string[];
+  }>>()
+  const family = members.filter((m) => (m.roles || []).some((r) => famIds.includes(r)))
+
+  const ranks = await c.env.DB.prepare(
+    'SELECT id, name, role_id, sort_order FROM ranks WHERE guild_id = ? ORDER BY sort_order ASC'
+  ).bind(guildId).all()
+  const rankRows = ranks.results as Array<{ id: number; name: string; role_id: string; sort_order: number }>
+  const reqMain = await c.env.DB.prepare('SELECT rank_from, rank_to, family_contracts FROM rank_requirements_main').all()
+  const reqAlt = await c.env.DB.prepare('SELECT rank_from, rank_to, family_contracts, tuning_contracts FROM rank_requirements_alt').all()
+  const mainMap: Record<string, number> = {}
+  for (const r of reqMain.results as Array<{ rank_from: number; rank_to: number; family_contracts: number }>) {
+    mainMap[`${r.rank_from}->${r.rank_to}`] = r.family_contracts
+  }
+  const altMap: Record<string, { family_contracts: number; tuning_contracts: number }> = {}
+  for (const r of reqAlt.results as Array<{ rank_from: number; rank_to: number; family_contracts: number; tuning_contracts: number }>) {
+    altMap[`${r.rank_from}->${r.rank_to}`] = r
+  }
+
+  const famCounts = await c.env.DB.prepare(
+    `SELECT discord_id, COUNT(*) as c FROM contracts WHERE guild_id = ? AND status = 'approved'
+     AND contract_type NOT IN ('тюнинг', 'курьер-еды') GROUP BY discord_id`
+  ).bind(guildId).all()
+  const perCounts = await c.env.DB.prepare(
+    `SELECT discord_id, COUNT(*) as c FROM contracts WHERE guild_id = ? AND status = 'approved'
+     AND contract_type IN ('тюнинг', 'курьер-еды') GROUP BY discord_id`
+  ).bind(guildId).all()
+  const famMap: Record<string, number> = {}
+  for (const r of famCounts.results as Array<{ discord_id: string; c: number }>) famMap[r.discord_id] = r.c
+  const perMap: Record<string, number> = {}
+  for (const r of perCounts.results as Array<{ discord_id: string; c: number }>) perMap[r.discord_id] = r.c
+
+  const sorted = [...rankRows].sort((a, b) => a.sort_order - b.sort_order)
+  const board = family.map((m) => {
+    let best: typeof rankRows[0] | null = null
+    for (const r of rankRows) {
+      if (r.role_id && (m.roles || []).includes(r.role_id)) {
+        if (!best || r.sort_order > best.sort_order) best = r
+      }
+    }
+    let next: typeof rankRows[0] | null = null
+    let need: { family: number | null; personal: number | null } = { family: null, personal: null }
+    if (best) {
+      const idx = sorted.findIndex((r) => r.id === best!.id)
+      const nx = sorted[idx + 1]
+      if (nx) {
+        next = nx
+        need = {
+          family: mainMap[`${best.id}->${nx.id}`] ?? null,
+          personal: altMap[`${best.id}->${nx.id}`]?.tuning_contracts ?? null,
+        }
+      }
+    }
+    return {
+      discord_id: m.user.id,
+      username: m.user.username,
+      avatar: m.user.avatar
+        ? `https://cdn.discordapp.com/avatars/${m.user.id}/${m.user.avatar}.png?size=128`
+        : null,
+      rank: best?.name || null,
+      rank_order: best?.sort_order || 0,
+      next_rank: next?.name || null,
+      family_done: famMap[m.user.id] || 0,
+      family_need: need.family,
+      personal_done: perMap[m.user.id] || 0,
+      personal_need: need.personal,
+    }
+  })
+  board.sort((a, b) => b.rank_order - a.rank_order || b.family_done - a.family_done)
+
+  return c.json({ members: board })
+})
+
 export const guildsRoutes = guilds

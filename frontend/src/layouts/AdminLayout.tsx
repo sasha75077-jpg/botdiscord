@@ -15,6 +15,7 @@ import {
   Bell,
   Banknote,
   TrendingUp,
+  Trophy,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -34,6 +35,7 @@ export default function AdminLayout({ children }: Props) {
     { name: 'Пользователи', href: '/users', icon: Users },
     { name: 'Роли', href: '/roles', icon: Shield },
     { name: 'Ранги', href: '/ranks', icon: TrendingUp },
+    { name: 'Таблица', href: '/leaderboard', icon: Trophy },
     { name: 'Заявки', href: '/applications', icon: ClipboardList },
     { name: 'Выплаты', href: '/prices', icon: Banknote },
     { name: 'Уведомления', href: '/notifications', icon: Bell },
