@@ -21,6 +21,8 @@ export default function NotificationsPage() {
   const [appsChannel, setAppsChannel] = useState('');
   const [bonusChannel, setBonusChannel] = useState('');
   const [promoChannel, setPromoChannel] = useState('');
+  const [promoReportsChannel, setPromoReportsChannel] = useState('');
+  const [promoPingIds, setPromoPingIds] = useState<string[]>([]);
   const [pingIds, setPingIds] = useState<string[]>([]);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -47,7 +49,9 @@ export default function NotificationsPage() {
     setUploadChannel(s.contracts_upload_channel_id || '');
     setAppsChannel(s.applications_log_channel_id || '');
     setBonusChannel(s.bonus_log_channel_id || '');
-    setPromoChannel(s.promo_log_channel_id || '');
+    setPromoChannel(s.promo_panel_channel_id || s.promo_log_channel_id || '');
+    setPromoReportsChannel(s.promo_log_channel_id || '');
+    setPromoPingIds(String(s.promo_ping_role_ids || '').split(',').map((x: string) => x.trim()).filter(Boolean));
     setPingIds(String(s.contracts_ping_role_ids || '').split(',').map((x: string) => x.trim()).filter(Boolean));
   }, [settings]);
 
@@ -59,7 +63,9 @@ export default function NotificationsPage() {
         contracts_upload_channel_id: uploadChannel,
         applications_log_channel_id: appsChannel,
         bonus_log_channel_id: bonusChannel,
-        promo_log_channel_id: promoChannel,
+        promo_panel_channel_id: promoChannel,
+        promo_log_channel_id: promoReportsChannel,
+        promo_ping_role_ids: promoPingIds.join(','),
         contracts_ping_role_ids: pingIds.join(','),
       }),
     onSuccess: () => {
@@ -151,9 +157,9 @@ export default function NotificationsPage() {
       </div>
 
       <div className="card">
-        <h2 className="text-xl font-bold mb-1">Канал повышений</h2>
+        <h2 className="text-xl font-bold mb-1">Канал повышений (лестница)</h2>
         <p className="text-sm text-gray-500 mb-3">
-          Сюда бот постит отчеты на повышение и лестницу рангов (обновляется сама).
+          Сюда бот постит систему повышения (обновляется сама).
         </p>
         <label className="block text-sm font-medium mb-2">Канал</label>
         <select value={promoChannel} onChange={(e) => setPromoChannel(e.target.value)} className="input w-full max-w-md">
@@ -162,6 +168,43 @@ export default function NotificationsPage() {
             <option key={ch.id} value={ch.id}># {ch.name}</option>
           ))}
         </select>
+      </div>
+
+      <div className="card">
+        <h2 className="text-xl font-bold mb-1">Канал заявок на повышение</h2>
+        <p className="text-sm text-gray-500 mb-3">
+          Сюда падают новые заявки с кнопками рассмотрения.
+        </p>
+        <label className="block text-sm font-medium mb-2">Канал</label>
+        <select value={promoReportsChannel} onChange={(e) => setPromoReportsChannel(e.target.value)} className="input w-full max-w-md">
+          <option value="">— не выбран —</option>
+          {channels.map((ch: any) => (
+            <option key={ch.id} value={ch.id}># {ch.name}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="card">
+        <h2 className="text-xl font-bold mb-1">Кого тегать на новые заявки повышения</h2>
+        <p className="text-sm text-gray-500 mb-3">Можно несколько ролей (обычно админы).</p>
+        <div className="max-h-64 overflow-y-auto border border-gray-200 dark:border-dark-600 rounded-lg divide-y divide-gray-100 dark:divide-dark-700 max-w-md">
+          {roles.map((r) => (
+            <label key={r.id} className="flex items-center gap-3 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-700">
+              <input
+                type="checkbox"
+                checked={promoPingIds.includes(r.id)}
+                onChange={() => setPromoPingIds(promoPingIds.includes(r.id) ? promoPingIds.filter((x) => x !== r.id) : [...promoPingIds, r.id])}
+                className="w-4 h-4"
+              />
+              <span
+                className="w-3 h-3 rounded-full flex-shrink-0"
+                style={{ backgroundColor: r.color ? `#${r.color.toString(16).padStart(6, '0')}` : '#99aab5' }}
+              />
+              <span className="flex-1 truncate">{r.name}</span>
+            </label>
+          ))}
+          {roles.length === 0 && <p className="px-3 py-4 text-sm text-gray-500">Нет ролей</p>}
+        </div>
       </div>
 
       <div className="card">

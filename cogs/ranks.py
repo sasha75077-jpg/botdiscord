@@ -40,7 +40,8 @@ async def build_ranks_embed(guild_id: str) -> discord.Embed:
 
 async def ensure_ranks_panel(bot, guild: discord.Guild) -> str:
     gid = str(guild.id)
-    ch_id = (await get_setting("promo_log_channel_id", gid)
+    ch_id = (await get_setting("promo_panel_channel_id", gid)
+             or await get_setting("promo_log_channel_id", gid)
              or await get_setting("promochannelid") or "").strip()
     if not ch_id or not ch_id.isdigit():
         return "no-channel"

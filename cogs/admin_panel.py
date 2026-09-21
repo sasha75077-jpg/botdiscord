@@ -3699,6 +3699,23 @@ async def post_promo_report_message(client: discord.Client, report_id: int):
     if not raw:
         return {"ok": False, "reason": "promochannelid_not_set"}
 
+    # Теги ролей на новые заявки
+    _pings = ""
+    try:
+        _praw = None
+        try:
+            _grow2 = await fetch_one("SELECT guild_id FROM promotion_reports WHERE report_id = ?", (int(report_id),))
+            _gg2 = (_grow2 or {}).get("guild_id")
+            if _gg2:
+                _praw = await get_setting("promo_ping_role_ids", str(_gg2))
+        except Exception:
+            pass
+        _ids = [x.strip() for x in (_praw or "").split(",") if x.strip().isdigit()]
+        if _ids:
+            _pings = " ".join(f"<@&{i}>" for i in _ids)
+    except Exception:
+        pass
+
     channel_id = int(raw)
     ch = client.get_channel(channel_id)
     if ch is None:
@@ -3712,7 +3729,7 @@ async def post_promo_report_message(client: discord.Client, report_id: int):
     embed.add_field(name="На ранг", value=str(r.get("to_name") or "?"), inline=True)
     embed.add_field(name="Статус", value=str(r.get("status") or "NEW"), inline=True)
 
-    msg = await ch.send(embed=embed, view=PromoActionView(int(report_id)))
+    msg = await ch.send(content=_pings or None, embed=embed, view=PromoActionView(int(report_id)))
 
     await execute(
         "UPDATE promotion_reports SET msg_channel_id=?, msg_id=? WHERE report_id=?",
