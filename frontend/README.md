@@ -1,171 +1,75 @@
-# Frontend
+# Frontend — веб-панель Melancholia
 
-React + TypeScript + Vite веб-панель для управления Discord ботом Melancholia.
-
-## Установка
-
-```bash
-npm install
-```
+React + TypeScript + Vite. Бэкенд — Cloudflare Workers (`workers/api`), база — D1. Старого Railway/FastAPI-бэкенда больше нет.
 
 ## Настройка
 
-Создать `.env` файл:
-
 ```env
-VITE_API_URL=http://localhost:8000/api
-VITE_WS_URL=ws://localhost:8000/ws
+# .env.production (локально; в git не лежит)
+VITE_API_URL=https://melancholia-api.<subdomain>.workers.dev
 ```
 
-Для production (Cloudflare Pages):
-
-```env
-VITE_API_URL=https://your-backend-url.railway.app/api
-VITE_WS_URL=wss://your-backend-url.railway.app/ws
-```
+Важно: **без `/api` на конце** — воркер отдает `/auth`, `/guilds` и т.д. напрямую. WebSocket нет (опрос через React Query).
 
 ## Запуск
 
-Development:
 ```bash
-npm run dev
-```
-
-Build:
-```bash
-npm run build
-```
-
-Preview:
-```bash
-npm run preview
-```
-
-## Структура
-
-```
-frontend/
-├── src/
-│   ├── components/       # Переиспользуемые компоненты
-│   ├── hooks/            # Custom hooks
-│   ├── layouts/          # Layout компоненты
-│   ├── lib/              # Утилиты (API, helpers)
-│   ├── pages/            # Страницы
-│   ├── store/            # Zustand stores
-│   ├── App.tsx           # Главный компонент
-│   ├── main.tsx          # Entry point
-│   └── index.css         # Global styles
-├── public/               # Статические файлы
-├── index.html
-├── package.json
-├── tsconfig.json
-├── vite.config.ts
-└── tailwind.config.js
+npm install
+npm run dev      # http://localhost:3000 (прокси /api -> localhost:8000, legacy)
+npm run build    # tsc + vite → dist/
 ```
 
 ## Деплой на Cloudflare Pages
 
-### Через GitHub (Рекомендуется)
-
-1. Залить код в GitHub репозиторий
-2. Перейти на https://dash.cloudflare.com/
-3. Pages → Create a project → Connect to Git
-4. Выбрать репозиторий
-5. Build settings:
-   - Build command: `npm run build`
-   - Build output directory: `dist`
-6. Environment variables:
-   ```
-   VITE_API_URL=https://your-backend.railway.app/api
-   VITE_WS_URL=wss://your-backend.railway.app/ws
-   ```
-7. Save and Deploy
-
-### Через CLI
+Проект `botdiscord` (домен `botdiscord-87a.pages.dev`) привязан к Git — прод собирается сам при `git push`.
 
 ```bash
-# Установить Wrangler
-npm install -g wrangler
-
-# Авторизоваться
-wrangler login
-
-# Деплой
-npm run build
-wrangler pages deploy dist --project-name=melancholia-panel
+git add ... && git commit -m "..." && git push
+# дашборд: Workers & Pages → botdiscord → Deployments → Success (2-3 мин)
 ```
 
-## Доступные роли
+Вручную (черновик для проверки):
 
-### Owner
-- Полный доступ ко всем серверам
-- Управление серверами
-- Глобальные настройки
+```bash
+npm run build
+npx wrangler pages deploy dist --project-name=botdiscord
+```
 
-### Admin
-- Управление своим сервером
-- Одобрение контрактов и отчетов
-- Управление пользователями
-- Настройки модулей
+Переменная Pages (Dashboard → Settings → Environment Variables, Production + Preview):
 
-### User
-- Просмотр своих контрактов
-- Подача отчетов
-- Просмотр своей статистики
-- Просмотр профиля
+```
+VITE_API_URL=https://melancholia-api.<subdomain>.workers.dev
+```
 
-## Авторизация
+## Роли и маршруты
 
-### Owner
-Вход через email и пароль (настроен в backend .env)
+| Роль | Что видит |
+|------|-----------|
+| owner | Все серверы, витрина, цены, пользователи, настройки |
+| admin | Свой сервер: контракты, заявки, премии, ранги, роли, пользователи, уведомления, панели, цены |
+| recruiter | Свои + очередь заявок/контрактов (только агитации на отправку), таблица |
+| user | Свои контракты/заявки/премии, таблица семьи, цены, профиль |
+| stranger | Только витрина серверов |
 
-### Discord Users
-Вход через Discord OAuth2:
-1. Клик "Войти через Discord"
-2. Авторизация на Discord
-3. Редирект обратно на сайт
-4. Автоматическое определение роли по правам на сервере
+Роль зашита в JWT при входе + тихо обновляется при загрузке (`App.tsx`). Протухший токен дает 401 (фронт обновляет), не 403.
 
-## WebSocket
+## Темы
 
-Real-time обновления через WebSocket:
-- Новые контракты
-- Изменения статусов
-- Обновления модулей
-- Уведомления
+`darkMode: 'class'`. По умолчанию `auto` — следит за `prefers-color-scheme` + переключатель в шапке (`ThemeToggle`, хранит `localStorage.theme`). Инлайн-скрипт в `index.html` ставит класс до отрисовки.
 
-## Компоненты
+## Структура
 
-Основные компоненты уже созданы:
-- `LoginPage` - страница входа
-- `DiscordCallbackPage` - обработка Discord OAuth2
-- `OwnerLayout` - layout для Owner
-- `AdminLayout` - layout для Admin
-- `UserLayout` - layout для User
-- `OwnerDashboard` - дашборд для Owner
-
-## TODO
-
-- [ ] Admin Dashboard (контракты, отчеты, пользователи)
-- [ ] User Dashboard (мои контракты, отчеты, профиль)
-- [ ] Страницы управления контрактами
-- [ ] Страницы отчетов
-- [ ] Настройки модулей
-- [ ] Графики и статистика
-- [ ] Dark mode toggle
-- [ ] Уведомления (toast)
-- [ ] Загрузка файлов
+```
+frontend/src/
+├── components/   # ContractForm, ApplicationForm, GuildSwitcher, ThemeToggle, ...
+├── layouts/      # OwnerLayout, AdminLayout, UserLayout
+├── lib/api.ts    # axios + все API-клиенты
+├── pages/        # owner/, admin/, user/, contracts/, applications/, ...
+├── store/        # authStore (zustand persist)
+├── App.tsx       # роуты по ролям
+└── index.css     # tailwind + .btn/.card/.input
+```
 
 ## Стек
 
-- React 18
-- TypeScript
-- Vite
-- TailwindCSS
-- React Router
-- React Query
-- Zustand
-- Axios
-- Lucide Icons
-- date-fns
-- recharts
+React 18, TypeScript, Vite 5, TailwindCSS, React Router 6, React Query 5, Zustand 4, Axios, Lucide Icons.

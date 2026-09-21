@@ -1,127 +1,58 @@
-# Деплой на Cloudflare - Пошаговая инструкция
+# Workers API — деплой и эксплуатация
 
-## 1. Установка Wrangler CLI
+Hono API на Cloudflare Workers + D1 (`melancholia-db`). R2 и KV **не используются** (закомментированы в `wrangler.toml`).
+
+## Первичная настройка (уже выполнена, для справки)
 
 ```bash
 cd workers/api
-npm install
-```
-
-## 2. Авторизация в Cloudflare
-
-```bash
 npx wrangler login
+npx wrangler d1 create melancholia-db   # database_id уже в wrangler.toml
 ```
 
-## 3. Создание D1 базы данных
+Миграции лежат в `migrations/` и применяются по порядку (сейчас `0001`–`0011`):
 
 ```bash
-# Создать D1 базу
-npx wrangler d1 create melancholia-db
-
-# Скопировать database_id из вывода и вставить в wrangler.toml
+npx wrangler d1 execute melancholia-db --remote --yes --file=migrations/0001_initial_schema.sql
 ```
 
-Обновите `wrangler.toml`:
-```toml
-[[d1_databases]]
-binding = "DB"
-database_name = "melancholia-db"
-database_id = "ВАШ_DATABASE_ID_ЗДЕСЬ"
-```
-
-## 4. Применить миграции D1
-
-```bash
-# Применить миграцию локально (для тестирования)
-npx wrangler d1 execute melancholia-db --local --file=./migrations/0001_initial_schema.sql
-
-# Применить миграцию в production
-npx wrangler d1 execute melancholia-db --remote --file=./migrations/0001_initial_schema.sql
-```
-
-## 5. Создание R2 bucket для credentials
-
-```bash
-npx wrangler r2 bucket create melancholia-credentials
-```
-
-## 6. Создание KV namespace для кэша
-
-```bash
-# Production KV
-npx wrangler kv:namespace create CACHE
-
-# Скопировать id и вставить в wrangler.toml
-```
-
-Обновите `wrangler.toml`:
-```toml
-[[kv_namespaces]]
-binding = "CACHE"
-id = "ВАШ_KV_ID_ЗДЕСЬ"
-```
-
-## 7. Установка секретов
+Секреты (все уже заданы, команды на случай ротации):
 
 ```bash
 npx wrangler secret put DISCORD_CLIENT_ID
-# Введите: 1330743576451223635
-
 npx wrangler secret put DISCORD_CLIENT_SECRET
-# Введите: oYeVafZ3Rdgi-IHBLTODh-OMzFALpQeD
-
 npx wrangler secret put DISCORD_BOT_TOKEN
-# Введите ваш Discord Bot Token
-
 npx wrangler secret put SECRET_KEY
-# Введите секретный ключ для JWT (любая длинная строка)
-
 npx wrangler secret put OWNER_EMAIL
-# Введите email владельца
-
 npx wrangler secret put OWNER_PASSWORD
-# Введите пароль владельца
+npx wrangler secret put SYNC_SECRET   # ключ бота (он же PANEL_SYNC_SECRET в .env бота)
 ```
 
-## 8. Деплой API Worker
+## Деплой
 
 ```bash
+cd workers/api
 npx wrangler deploy
+# → https://melancholia-api.sasha75077.workers.dev
 ```
 
-После деплоя вы получите URL вида: `https://melancholia-api.YOUR-SUBDOMAIN.workers.dev`
+## Связки, которые легко сломать
 
-## 9. Обновить frontend
+* `VITE_API_URL` на Pages — **без `/api`** на конце.
+* Discord Developer Portal → OAuth2 → Redirects: `https://botdiscord-87a.pages.dev/auth/callback` (редирект идет на **фронт**, не на API).
+* CORS разрешает только прод-домен и `localhost:5173` (`src/index.ts`).
+* Токены: access 1ч, refresh 7d. Протухший access — **401** (фронт обновляет), а не 403.
 
-В настройках Cloudflare Pages добавьте переменную окружения:
-- **Ключ:** `VITE_API_URL`
-- **Значение:** `https://melancholia-api.YOUR-SUBDOMAIN.workers.dev`
-
-## 10. Обновить Discord OAuth Redirect URI
-
-В Discord Developer Portal → OAuth2 → Redirects добавьте:
-```
-https://melancholia-api.YOUR-SUBDOMAIN.workers.dev/auth/callback
-```
-
-## 11. Проверка деплоя
+## Диагностика
 
 ```bash
-# Просмотр логов
-npx wrangler tail
-
-# Проверка health endpoint
-curl https://melancholia-api.YOUR-SUBDOMAIN.workers.dev/health
+npx wrangler tail --format pretty
+npx wrangler d1 execute melancholia-db --remote --command="SELECT COUNT(*) FROM contracts;"
+curl https://melancholia-api.sasha75077.workers.dev/health
 ```
 
-## Локальная разработка
+## Роуты (префикс — корень, без /api)
 
-```bash
-# Запуск локального dev сервера с локальной D1
-npx wrangler dev --local
-```
+`/auth/*` (url, callback, owner/login, refresh, switch, me), `/guilds/*` (+ contracts/users/permissions/applications внутри), `/contracts/*`, `/users/*`, `/permissions/*`, `/prices`, `/showcase`, `/panels/*`.
 
----
-
-**Готово!** Теперь весь проект работает на Cloudflare без необходимости VPN.
+Запись требует JWT (ролевые проверки внутри) или `SYNC_SECRET` (бот). GET в основном открытые.
