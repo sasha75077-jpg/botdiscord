@@ -3421,9 +3421,14 @@ async def mark_contract_message(client, channel_id, message_id, accepted: bool, 
             return False
         emb = msg.embeds[0] if msg.embeds else discord.Embed(title=title)
         emb.color = 0x2ECC71 if accepted else 0xE74C3C
-        emb.add_field(name="Статус", value="✅ Принят" if accepted else "❌ Отклонен", inline=False)
+        _ef = [(f.name, f.value, f.inline) for f in emb.fields
+               if f.name not in ("Статус", "Решение")]
+        _ef.append(("Статус", "✅ Принят" if accepted else "❌ Отклонен", False))
         if decider_id:
-            emb.add_field(name="Решение", value=f"<@{decider_id}> (`{decider_id}`)", inline=False)
+            _ef.append(("Решение", f"<@{decider_id}> (`{decider_id}`)", False))
+        emb.clear_fields()
+        for _n, _v, _i in _ef:
+            emb.add_field(name=_n, value=str(_v)[:1024], inline=_i)
         await msg.edit(embed=emb, view=None)
         return True
     except Exception as e:
@@ -3555,8 +3560,24 @@ async def approve_contract(interaction: discord.Interaction, contract_id: int):
             else "В повышение уже засчитан сегодня (повтор)"
         )
 
-    # 5) ВОЗВРАТ В СПИСОК (без followup, чтобы не ловить Unknown Webhook)
-    await show_pending_contracts(interaction, page=0)
+    # 5) Карточка решения на том же сообщении (без возврата в список)
+    try:
+        _dec = interaction.message.embeds[0] if interaction.message and interaction.message.embeds else discord.Embed(title=f"Контракт #{contract_id}")
+        _dec.color = 0x2ECC71
+        _fields = [(f.name, f.value, f.inline) for f in _dec.fields
+                   if f.name not in ("Статус", "Решение")]
+        _fields.append(("Статус", "✅ Принят", False))
+        _fields.append(("Решение", f"<@{interaction.user.id}> (`{interaction.user.id}`)", False))
+        _dec.clear_fields()
+        for _n, _v, _i in _fields:
+            _dec.add_field(name=_n, value=str(_v)[:1024], inline=_i)
+        _back = ContractActionView(0)
+        for _ch in [ch for ch in list(_back.children)
+                    if getattr(_ch, "custom_id", "") != "back_to_list"]:
+            _back.remove_item(_ch)
+        await interaction.message.edit(embed=_dec, view=_back)
+    except Exception as e:
+        print(f"[contract-decide] warn: {e}")
 
     # 6) AUDIT LOG
     log = discord.Embed(title="✅ Контракт принят", color=0x2ECC71)
@@ -3672,8 +3693,25 @@ class RejectReasonModal(Modal, title="Причина отклонения"):
         discord_id = contract["discord_id"]
         contract_type = contract["contract_type"]
 
-        # Возврат в список (без followup)
-        await show_pending_contracts(interaction, page=0)
+        # Карточка решения на том же сообщении
+        try:
+            _dec = interaction.message.embeds[0] if interaction.message and interaction.message.embeds else discord.Embed(title=f"Контракт #{self.contract_id}")
+            _dec.color = 0xE74C3C
+            _fields = [(f.name, f.value, f.inline) for f in _dec.fields
+                       if f.name not in ("Статус", "Решение")]
+            _fields.append(("Статус", "❌ Отклонен", False))
+            _fields.append(("Решение", f"<@{interaction.user.id}> (`{interaction.user.id}`)", False))
+            _fields.append(("Причина", reason[:1000], False))
+            _dec.clear_fields()
+            for _n, _v, _i in _fields:
+                _dec.add_field(name=_n, value=str(_v)[:1024], inline=_i)
+            _back = ContractActionView(0)
+            for _ch in [ch for ch in list(_back.children)
+                        if getattr(_ch, "custom_id", "") != "back_to_list"]:
+                _back.remove_item(_ch)
+            await interaction.message.edit(embed=_dec, view=_back)
+        except Exception as e:
+            print(f"[contract-decide] warn: {e}")
 
         # AUDIT LOG
         log = discord.Embed(title="❌ Контракт отклонен", color=0xE74C3C)
