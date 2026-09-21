@@ -50,7 +50,8 @@ def queue_sync(path: str, payload: dict, method: str = "POST"):
 
 
 def queue_contract_sync(guild_id, ts, discord_id, contract_type,
-                        price=0, nickname=None, status="PENDING", static=None):
+                        price=0, nickname=None, status="PENDING", static=None,
+                        claimed_by=None, claimed_at=None):
     """Поставить синхронизацию контракта в очередь (не блокирует бота)."""
     if not guild_id or not ts or not discord_id or not contract_type:
         return
@@ -62,6 +63,8 @@ def queue_contract_sync(guild_id, ts, discord_id, contract_type,
         "nickname": str(nickname) if nickname else None,
         "status": status or "PENDING",
         "static": str(static) if static else None,
+        "claimed_by": str(claimed_by) if claimed_by else None,
+        "claimed_at": str(claimed_at) if claimed_at else None,
     })
 
 

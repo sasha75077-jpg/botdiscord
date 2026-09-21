@@ -203,7 +203,7 @@ contracts.post('/:guildId/contracts/sync', async (c) => {
   const body = await c.req.json<{
     ts: string; discord_id: string; contract_type: string;
     price?: number; nickname?: string; discord_username?: string; status?: string;
-    static?: string;
+    static?: string; claimed_by?: string | null; claimed_at?: string | null;
   }>()
 
   if (!body.ts || !body.discord_id || !body.contract_type) {
@@ -228,14 +228,18 @@ contracts.post('/:guildId/contracts/sync', async (c) => {
 
   if (existing) {
     await c.env.DB.prepare(
-      'UPDATE contracts SET price = ?, nickname = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-    ).bind(body.price ?? 0, nick, status, existing.id).run()
+      `UPDATE contracts SET price = ?, nickname = ?, status = ?,
+        claimed_by = COALESCE(?, claimed_by), claimed_at = COALESCE(?, claimed_at),
+        updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+    ).bind(body.price ?? 0, nick, status,
+      body.claimed_by || null, body.claimed_at || null, existing.id).run()
     return c.json({ id: existing.id, updated: true })
   }
 
   const res = await c.env.DB.prepare(
-    'INSERT INTO contracts (guild_id, discord_id, discord_username, contract_type, nickname, price, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-  ).bind(guildId, body.discord_id, body.discord_username || null, body.contract_type, nick, body.price ?? 0, status, body.ts).run()
+    'INSERT INTO contracts (guild_id, discord_id, discord_username, contract_type, nickname, price, status, created_at, claimed_by, claimed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(guildId, body.discord_id, body.discord_username || null, body.contract_type, nick, body.price ?? 0, status, body.ts,
+    body.claimed_by || null, body.claimed_at || null).run()
   return c.json({ id: res.meta.last_row_id, created: true })
 })
 

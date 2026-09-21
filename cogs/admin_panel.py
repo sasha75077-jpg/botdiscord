@@ -3338,6 +3338,45 @@ class ContractActionView(View):
             pass
         return 0
 
+    @discord.ui.button(label="🙋 Взять", style=discord.ButtonStyle.primary, custom_id="claim_contract")
+    async def claim_btn(self, interaction: discord.Interaction, button: Button):
+        rid = self._resolve_id(interaction)
+        if not rid:
+            return await interaction.response.send_message("❌ Не нашел контракт.", ephemeral=True)
+        if not interaction.guild or not isinstance(interaction.user, discord.Member):
+            return await interaction.response.send_message("❌ Только на сервере.", ephemeral=True)
+        try:
+            from cogs.applications import is_staff_member
+            if not await is_staff_member(interaction.user):
+                return await interaction.response.send_message("❌ Только стафф.", ephemeral=True)
+        except Exception:
+            pass
+        row = await fetch_one("SELECT * FROM contracts WHERE id = ?", (rid,))
+        if not row or row["confirm_status"] != "PENDING":
+            return await interaction.response.send_message("❌ Контракт уже обработан.", ephemeral=True)
+        if interaction.guild and row.get("guild_id") and str(row["guild_id"]) != str(interaction.guild.id):
+            return await interaction.response.send_message("❌ Этот контракт с другого сервера.", ephemeral=True)
+        now = datetime.utcnow().isoformat()
+        await execute(
+            "UPDATE contracts SET claimed_by = ?, claimed_at = ?, nudged_at = NULL WHERE id = ?",
+            (str(interaction.user.id), now, rid),
+        )
+        try:
+            from services.api_sync import queue_contract_sync
+            queue_contract_sync(
+                str(row.get("guild_id") or interaction.guild.id), row.get("ts"),
+                row["discord_id"], row["contract_type"],
+                price=row.get("price", 0), status="PENDING",
+                claimed_by=str(interaction.user.id), claimed_at=now,
+            )
+        except Exception as e:
+            print(f"[api_sync] warn: {e}")
+        try:
+            await interaction.response.send_message(
+                f"✅ Взял контракт #{rid}. Не забудь вынести решение.", ephemeral=True)
+        except Exception:
+            pass
+
     @discord.ui.button(label="✅ Принять", style=discord.ButtonStyle.success, custom_id="approve_contract")
     async def approve_btn(self, interaction: discord.Interaction, button: Button):
         rid = self._resolve_id(interaction)

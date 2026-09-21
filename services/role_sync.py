@@ -200,6 +200,11 @@ async def reconcile_member(bot, guild, member):
         return False
     guild_id = str(guild.id)
     discord_id = str(member.id)
+    try:
+        from cogs.ranks import ensure_user
+        await ensure_user(discord_id, guild_id)
+    except Exception as e:
+        print(f"[role-sync] warn ensure_user: {e}")
     mapping = await get_mapping(guild_id)
     if not mapping["admin_ids"] and not mapping["recruit_ids"]:
         return False  # привязки не настроены
@@ -654,6 +659,10 @@ async def _mirror_site_contract(bot, guild_id: str, r: dict):
             (want, local["id"]),
         )
         await _reply_contract_decision(bot, guild_id, r, want)
+        return
+    # Старые зеркала без ревью-сообщения: допостить карточку один раз
+    if not local.get("discord_message_id") and (local.get("confirm_status") or "PENDING") == "PENDING":
+        await _post_contract_review(bot, guild_id, r)
 
 
 async def _post_contract_review(bot, guild_id: str, r: dict):
@@ -661,6 +670,9 @@ async def _post_contract_review(bot, guild_id: str, r: dict):
     if bot is None:
         return
     try:
+        local = await fetch_one("SELECT * FROM contracts WHERE site_id = ?", (r.get("id"),))
+        if not local or local.get("discord_message_id"):
+            return  # уже есть ревью
         from cogs.admin_panel import ContractActionView
     except Exception as e:
         print(f"[contracts-log] warn import view: {e}")
@@ -668,9 +680,6 @@ async def _post_contract_review(bot, guild_id: str, r: dict):
     try:
         guild = bot.get_guild(int(guild_id))
         if guild is None:
-            return
-        local = await fetch_one("SELECT * FROM contracts WHERE site_id = ?", (r.get("id"),))
-        if not local:
             return
         cfg = await fetch_all(
             "SELECT setting_key, setting_value FROM guild_settings WHERE guild_id = ? AND setting_key IN ('contracts_upload_channel_id', 'contracts_log_channel_id', 'contracts_ping_role_ids')",
