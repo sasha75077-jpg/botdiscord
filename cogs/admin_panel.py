@@ -3560,7 +3560,7 @@ async def approve_contract(interaction: discord.Interaction, contract_id: int):
             else "В повышение уже засчитан сегодня (повтор)"
         )
 
-    # 5) Карточка решения на том же сообщении (без возврата в список)
+    # 5) Карточка решения на том же сообщении (кнопок больше нет вообще)
     try:
         _dec = interaction.message.embeds[0] if interaction.message and interaction.message.embeds else discord.Embed(title=f"Контракт #{contract_id}")
         _dec.color = 0x2ECC71
@@ -3571,11 +3571,7 @@ async def approve_contract(interaction: discord.Interaction, contract_id: int):
         _dec.clear_fields()
         for _n, _v, _i in _fields:
             _dec.add_field(name=_n, value=str(_v)[:1024], inline=_i)
-        _back = ContractActionView(0)
-        for _ch in [ch for ch in list(_back.children)
-                    if getattr(_ch, "custom_id", "") != "back_to_list"]:
-            _back.remove_item(_ch)
-        await interaction.message.edit(embed=_dec, view=_back)
+        await interaction.message.edit(embed=_dec, view=None)
     except Exception as e:
         print(f"[contract-decide] warn: {e}")
 
@@ -3693,7 +3689,7 @@ class RejectReasonModal(Modal, title="Причина отклонения"):
         discord_id = contract["discord_id"]
         contract_type = contract["contract_type"]
 
-        # Карточка решения на том же сообщении
+        # Карточка решения на том же сообщении (кнопок больше нет вообще)
         try:
             _dec = interaction.message.embeds[0] if interaction.message and interaction.message.embeds else discord.Embed(title=f"Контракт #{self.contract_id}")
             _dec.color = 0xE74C3C
@@ -3705,11 +3701,7 @@ class RejectReasonModal(Modal, title="Причина отклонения"):
             _dec.clear_fields()
             for _n, _v, _i in _fields:
                 _dec.add_field(name=_n, value=str(_v)[:1024], inline=_i)
-            _back = ContractActionView(0)
-            for _ch in [ch for ch in list(_back.children)
-                        if getattr(_ch, "custom_id", "") != "back_to_list"]:
-                _back.remove_item(_ch)
-            await interaction.message.edit(embed=_dec, view=_back)
+            await interaction.message.edit(embed=_dec, view=None)
         except Exception as e:
             print(f"[contract-decide] warn: {e}")
 

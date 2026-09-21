@@ -1,5 +1,7 @@
+import { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
+import { authApi } from '@/lib/api';
 
 // Pages
 import LoginPage from '@/pages/LoginPage';
@@ -33,7 +35,25 @@ import AdminLayout from '@/layouts/AdminLayout';
 import UserLayout from '@/layouts/UserLayout';
 
 function App() {
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user, login } = useAuthStore();
+
+  // Тихо обновить сессию при загрузке: роль могла измениться (сверка выдала права).
+  // refresh выдает токены уже с актуальной ролью из базы.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const refresh = localStorage.getItem('refresh_token');
+    if (!refresh) return;
+    (async () => {
+      try {
+        const { data } = await authApi.refreshToken(refresh);
+        const me = await authApi.getCurrentUser();
+        login(data.access_token, data.refresh_token, me.data);
+      } catch {
+        // refresh мертв - перелогин через обычную ошибку API
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!isAuthenticated) {
     return (
