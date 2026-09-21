@@ -209,6 +209,20 @@ export const panelsApi = {
     api.get('/panels/tasks', { params: guildId ? { guild_id: guildId } : {} }),
 };
 
+// Ranks API
+export const ranksApi = {
+  list: (guildId: string) => api.get(`/guilds/${guildId}/ranks`),
+  create: (guildId: string, data: { name: string; role_id?: string; sort_order?: number }) =>
+    api.post(`/guilds/${guildId}/ranks`, data),
+  update: (guildId: string, id: number, data: { name?: string; role_id?: string | null; sort_order?: number }) =>
+    api.put(`/guilds/${guildId}/ranks/${id}`, data),
+  remove: (guildId: string, id: number) =>
+    api.delete(`/guilds/${guildId}/ranks/${id}`),
+  requirements: (guildId: string) => api.get(`/guilds/${guildId}/requirements`),
+  saveRequirements: (guildId: string, data: { main?: any[]; alt?: any[] }) =>
+    api.put(`/guilds/${guildId}/requirements`, data),
+};
+
 // Prices API
 export const pricesApi = {
   list: () => api.get('/prices'),

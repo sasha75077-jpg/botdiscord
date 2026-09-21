@@ -23,6 +23,7 @@ CONTRACT_CHOICES = [
     app_commands.Choice(name="Агитации - Маркетплейс", value="агитации-маркетплейс"),
     app_commands.Choice(name="Агитации - WN", value="агитации-wn"),
     app_commands.Choice(name="Тюнинг", value="тюнинг"),
+    app_commands.Choice(name="Курьер еды (личный)", value="курьер-еды"),
 ]
 
 AGITATION_TYPES = {"агитации-маркетплейс", "агитации-wn"}
@@ -41,6 +42,7 @@ EXTRA_FIELDS: dict[str, list[tuple[str, str, bool, bool]]] = {
                              ("price", "Сумма за контракт", False, False)],
     "агитации-wn": [("wnCategory", "Категория", True, False), ("price", "Сумма за контракт", False, False)],
     "тюнинг": [],
+    "курьер-еды": [],
 }
 
 

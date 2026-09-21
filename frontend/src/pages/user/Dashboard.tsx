@@ -36,7 +36,9 @@ export default function UserDashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold mb-2">{data?.guild_name || 'Мой дашборд'}</h1>
-          <p className="text-gray-600 dark:text-gray-400">Моя статистика</p>
+          <p className="text-gray-600 dark:text-gray-400">
+            Моя статистика{data?.my_rank ? ` • Ранг: ${data.my_rank}` : ''}
+          </p>
         </div>
         <Link to="/contracts/new" className="btn btn-primary flex items-center gap-2">
           <Plus size={18} /> Отправить контракт

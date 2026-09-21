@@ -17,7 +17,7 @@ async function caller(c: any, env: Env) {
 
 // Типы: рекрут шлет только агитации, юзер - все кроме агитаций
 const AGITATION_TYPES = ['агитации-маркетплейс', 'агитации-wn']
-const ALL_TYPES = ['активация', 'дары-моря', 'металлургия-сдача', 'металлургия-добыча', 'товары', 'ателье', 'тюнинг', ...AGITATION_TYPES]
+const ALL_TYPES = ['активация', 'дары-моря', 'металлургия-сдача', 'металлургия-добыча', 'товары', 'ателье', 'тюнинг', 'курьер-еды', ...AGITATION_TYPES]
 
 // GET /guilds/:guildId/contracts/
 contracts.get('/:guildId/contracts/', async (c) => {

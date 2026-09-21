@@ -54,6 +54,21 @@ export default function AdminDashboard() {
     enabled: !!guildId,
   });
 
+  // Живой онлайн/состав из Discord
+  const { data: live } = useQuery({
+    queryKey: ['dashboard-live', guildId],
+    queryFn: async () => {
+      if (!guildId) return null;
+      try {
+        const { data } = await guildsApi.dashboard(guildId);
+        return data;
+      } catch {
+        return null;
+      }
+    },
+    enabled: !!guildId,
+  });
+
   // Получить права доступа
   const { data: permissions, isLoading: permissionsLoading } = useQuery({
     queryKey: ['permissions', guildId],
@@ -133,8 +148,11 @@ export default function AdminDashboard() {
         <div className="card">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Пользователей</p>
-              <p className="text-3xl font-bold mt-1">{guild.total_users}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Участников Discord</p>
+              <p className="text-3xl font-bold mt-1">{live?.members_total ?? '—'}</p>
+              <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                Онлайн: {live?.members_online ?? '—'}
+              </p>
             </div>
             <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
               <Users className="text-blue-600 dark:text-blue-400" size={24} />

@@ -506,6 +506,7 @@ PRICE_LABELS = {
     "ore.delivery.silver": "Руда: Сдача Серебро",
     "ore.delivery.tin": "Руда: Сдача Олово",
     "tuning:with_screenshot": "Тюнинг: со скриншотом",
+    "courier:delivery": "Курьер еды",
     "ore_unit:copper": "Добыча руды: Медь",
     "ore_unit:gold": "Добыча руды: Золото",
     "ore_unit:iron": "Добыча руды: Железо",
@@ -513,13 +514,14 @@ PRICE_LABELS = {
     "ore_unit:tin": "Добыча руды: Олово",
 }
 
-CATEGORY_ORDER = ["Агитации", "Товары", "Ателье", "Тюнинг", "Руда (доставка)", "Руда (добыча)"]
+CATEGORY_ORDER = ["Агитации", "Товары", "Ателье", "Тюнинг", "Курьер", "Руда (доставка)", "Руда (добыча)"]
 
 CATEGORY_QUERIES = {
     "Агитации": "item_key LIKE 'agit:%'",
     "Товары": "item_key LIKE 'goods.%'",
     "Ателье": "item_key LIKE 'atelier.%'",
     "Тюнинг": "item_key LIKE 'tuning:%'",
+    "Курьер": "item_key LIKE 'courier:%'",
     "Руда (доставка)": "item_key LIKE 'ore.delivery.%'",
     "Руда (добыча)": "item_key LIKE 'ore_unit:%'",
 }
@@ -3319,6 +3321,8 @@ async def approve_contract(interaction: discord.Interaction, contract_id: int):
     ct = (contract_type or "").strip().lower()
     excluded = ct in PROMO_EXCLUDED_TYPES
     is_tuning = (ct == "тюнинг")
+    # Личные контракты (не семейные): тюнинг + курьер еды
+    is_personal = ct in ("тюнинг", "курьер-еды")
 
     admin_id = str(interaction.user.id)
     now = datetime.utcnow().isoformat()
@@ -3356,11 +3360,11 @@ async def approve_contract(interaction: discord.Interaction, contract_id: int):
     credit_day = (contract.get("msk_date_iso") or "").strip()
     counted_for_promo = False
 
-    # 3) начисление в повышение + антидубль (НО НЕ ДЛЯ ТЮНИНГА!)
+    # 3) начисление в повышение + антидубль (личные: тюнинг/курьер - в свой котел)
     if (not excluded) and credit_day:
-        credit_kind = "tuning" if is_tuning else "family"
-    
-        if is_tuning:
+        credit_kind = "tuning" if is_personal else "family"
+
+        if is_personal:
             # ТЮНИНГ: удаляем старые за день и добавляем новую (обходит UNIQUE)
             await execute(
                 "DELETE FROM promo_credits WHERE discord_id=? AND credit_day=? AND credit_kind=? AND contract_type=?",
@@ -3387,7 +3391,7 @@ async def approve_contract(interaction: discord.Interaction, contract_id: int):
             counted_for_promo = bool(row)
     
         if counted_for_promo:
-            if is_tuning:
+            if is_personal:
                 await execute("UPDATE users SET tuning_total = tuning_total + 1 WHERE discord_id = ?", (discord_id,))
             else:
                 await execute("UPDATE users SET family_total = family_total + 1 WHERE discord_id = ?", (discord_id,))
@@ -3397,7 +3401,7 @@ async def approve_contract(interaction: discord.Interaction, contract_id: int):
         gained_text = "Не засчитывается в повышение"
     else:
         gained_text = (
-            ("+1 тюнинг" if is_tuning else "+1 семейный контракт")
+            ("+1 личный" if is_personal else "+1 семейный контракт")
             if counted_for_promo
             else "В повышение уже засчитан сегодня (повтор)"
         )

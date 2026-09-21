@@ -17,6 +17,7 @@ const PRICE_LABELS: Record<string, string> = {
   'ore.delivery.silver': 'Руда: сдача Серебро',
   'ore.delivery.tin': 'Руда: сдача Олово',
   'tuning:with_screenshot': 'Тюнинг: со скриншотом',
+  'courier:delivery': 'Курьер еды',
   'ore_unit:copper': 'Добыча руды: Медь',
   'ore_unit:gold': 'Добыча руды: Золото',
   'ore_unit:iron': 'Добыча руды: Железо',
@@ -29,6 +30,7 @@ const CATEGORIES: Array<{ name: string; match: (k: string) => boolean }> = [
   { name: 'Товары', match: (k) => k.startsWith('goods.') },
   { name: 'Ателье', match: (k) => k.startsWith('atelier.') },
   { name: 'Тюнинг', match: (k) => k.startsWith('tuning:') },
+  { name: 'Курьер', match: (k) => k.startsWith('courier:') },
   { name: 'Руда (сдача)', match: (k) => k.startsWith('ore.delivery.') },
   { name: 'Руда (добыча)', match: (k) => k.startsWith('ore_unit:') },
 ];

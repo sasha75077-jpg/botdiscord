@@ -24,6 +24,7 @@ import PanelsPage from '@/pages/admin/PanelsPage';
 import PricesPage from '@/pages/PricesPage';
 import BonusPage from '@/pages/BonusPage';
 import ProfilePage from '@/pages/ProfilePage';
+import RanksPage from '@/pages/RanksPage';
 
 // Layouts
 import OwnerLayout from '@/layouts/OwnerLayout';
@@ -64,6 +65,7 @@ function App() {
           <Route path="/owner/showcase" element={<ShowcaseManagePage />} />
           <Route path="/prices" element={<PricesPage />} />
           <Route path="/guilds/:guildId/roles" element={<RolesPage />} />
+          <Route path="/guilds/:guildId/ranks" element={<RanksPage />} />
           <Route path="/guilds" element={<div>Guilds Management</div>} />
           <Route path="/guilds/:guildId" element={<div>Guild Details</div>} />
           <Route path="*" element={<Navigate to="/" replace />} />
@@ -89,8 +91,8 @@ function App() {
           <Route path="/applications/new" element={<NewApplicationPage />} />
           <Route path="/applications/:id" element={<ApplicationDetailPage />} />
           <Route path="/reports" element={<BonusPage />} />
+          <Route path="/ranks" element={<RanksPage />} />
           <Route path="/users" element={<UsersPage />} />
-          <Route path="/users" element={<div>Users</div>} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/panels" element={<PanelsPage />} />
           <Route path="/prices" element={<PricesPage />} />
@@ -135,6 +137,7 @@ function App() {
         <Route path="/applications/:id" element={<ApplicationDetailPage />} />
         <Route path="/prices" element={<PricesPage />} />
         <Route path="/reports" element={<BonusPage />} />
+        <Route path="/ranks" element={<RanksPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

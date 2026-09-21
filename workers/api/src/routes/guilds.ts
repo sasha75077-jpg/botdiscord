@@ -257,6 +257,30 @@ guilds.get('/:guildId/dashboard', async (c) => {
     'SELECT id, contract_type, price, status, created_at FROM contracts WHERE guild_id = ? AND discord_id = ? ORDER BY created_at DESC LIMIT 5'
   ).bind(guildId, discordId).all()
 
+  // Ранг по Discord-ролям
+  let myRank: string | null = null
+  try {
+    if (c.env.DISCORD_BOT_TOKEN) {
+      const mresp = await fetch(
+        `${c.env.DISCORD_API_ENDPOINT}/guilds/${guildId}/members/${discordId}`,
+        { headers: { Authorization: `Bot ${c.env.DISCORD_BOT_TOKEN}` } }
+      )
+      if (mresp.ok) {
+        const member = await mresp.json<{ roles: string[] }>()
+        const ranks = await c.env.DB.prepare(
+          'SELECT name, role_id, sort_order FROM ranks WHERE guild_id = ?'
+        ).bind(guildId).all()
+        let best: { name: string; sort_order: number } | null = null
+        for (const r of ranks.results as Array<{ name: string; role_id: string; sort_order: number }>) {
+          if (r.role_id && (member.roles || []).includes(r.role_id)) {
+            if (!best || r.sort_order > best.sort_order) best = r
+          }
+        }
+        myRank = best?.name || null
+      }
+    }
+  } catch { /* ignore */ }
+
   return c.json({
     guild_name: guildName,
     members_total: membersTotal,
@@ -265,6 +289,7 @@ guilds.get('/:guildId/dashboard', async (c) => {
     recruiters,
     my_contracts: myContracts,
     my_recent: recent.results,
+    my_rank: myRank,
   })
 })
 

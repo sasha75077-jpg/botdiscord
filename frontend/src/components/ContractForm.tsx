@@ -25,6 +25,7 @@ const CONTRACT_TYPES = [
   { value: 'агитации-маркетплейс', label: 'Агитации - Маркетплейс', recruiterOnly: true },
   { value: 'агитации-wn', label: 'Агитации - WhatsApp News', recruiterOnly: true },
   { value: 'тюнинг', label: 'Тюнинг', recruiterOnly: false },
+  { value: 'курьер-еды', label: 'Курьер еды (личный)', recruiterOnly: false },
 ];
 
 const MAX_FILE = 8 * 1024 * 1024;
@@ -67,6 +68,8 @@ export default function ContractForm({ guildId, onSuccess, restrictedToAgitation
       }
       case 'тюнинг':
         return `Выплата: ${fmt(priceMap['tuning:with_screenshot'] || 0)}`;
+      case 'курьер-еды':
+        return `Выплата: ${fmt(priceMap['courier:delivery'] || 0)} (личный)`;
       case 'ателье':
         return `Выплата за форму: ${fmt(priceMap['atelier.uniform'] || 0)}`;
       case 'агитации-маркетплейс':
@@ -195,6 +198,10 @@ export default function ContractForm({ guildId, onSuccess, restrictedToAgitation
       }
       case 'тюнинг': {
         if (n !== 1) return 'Прикрепи 1 скриншот';
+        break;
+      }
+      case 'курьер-еды': {
+        if (n < 1 || n > 10) return 'Нужно 1..10 скриншотов';
         break;
       }
       default:

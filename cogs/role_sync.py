@@ -27,6 +27,10 @@ class RoleSync(commands.Cog):
             except Exception as e:
                 print(f"[role-sync] warn pull {guild.id}: {e}")
             try:
+                await rs.pull_ranks(str(guild.id))
+            except Exception as e:
+                print(f"[ranks-pull] warn {guild.id}: {e}")
+            try:
                 await rs.push_users(str(guild.id))
             except Exception as e:
                 print(f"[users-push] warn {guild.id}: {e}")

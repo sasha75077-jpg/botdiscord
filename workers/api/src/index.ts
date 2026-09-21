@@ -12,6 +12,7 @@ import { showcaseRoutes } from './routes/showcase'
 import { pricesRoutes } from './routes/prices'
 import { bonusRoutes } from './routes/bonus'
 import { panelsRoutes } from './routes/panels'
+import { ranksRoutes } from './routes/ranks'
 
 export interface Env {
   DB: D1Database
@@ -58,5 +59,6 @@ app.route('/showcase', showcaseRoutes)
 app.route('/prices', pricesRoutes)
 app.route('/guilds', bonusRoutes)
 app.route('/panels', panelsRoutes)
+app.route('/guilds', ranksRoutes)
 
 export default app

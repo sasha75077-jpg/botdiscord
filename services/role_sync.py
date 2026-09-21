@@ -443,7 +443,6 @@ async def _execute_panel_task(bot, t):
 
 
 async def push_users(guild_id: str):
-    """Залить юзеров сервера на сайт (static и членство)."""
     if not SYNC_SECRET:
         return 0
     try:
@@ -480,6 +479,45 @@ def _api_post(path, payload):
     )
     with _u.urlopen(req, timeout=30) as r:
         r.read()
+
+
+async def pull_ranks(guild_id: str):
+    """Лестница рангов и требования с сайта в локальную БД (полная замена)."""
+    if not SYNC_SECRET:
+        return
+    try:
+        data = await asyncio.to_thread(_api_get, f"/guilds/{guild_id}/ranks")
+    except Exception as e:
+        print(f"[ranks-pull] warn ranks: {e}")
+        return
+    try:
+        req = await asyncio.to_thread(_api_get, f"/guilds/{guild_id}/requirements")
+    except Exception as e:
+        print(f"[ranks-pull] warn req: {e}")
+        return
+    try:
+        await execute("DELETE FROM ranks WHERE guild_id = ?", (guild_id,))
+        for r in (data or {}).get("ranks", []) or []:
+            await execute(
+                "INSERT INTO ranks (id, name, role_id, min_contracts, sort_order, guild_id) VALUES (?, ?, ?, ?, ?, ?)",
+                (r.get("id"), r.get("name"), str(r.get("role_id") or "") if r.get("role_id") else None,
+                 r.get("min_contracts") or 0, r.get("sort_order") or 0, guild_id),
+            )
+        await execute("DELETE FROM rank_requirements_main")
+        for r in (req or {}).get("main", []) or []:
+            await execute(
+                "INSERT INTO rank_requirements_main (rank_from, rank_to, family_contracts) VALUES (?, ?, ?)",
+                (r.get("rank_from"), r.get("rank_to"), r.get("family_contracts") or 0),
+            )
+        await execute("DELETE FROM rank_requirements_alt")
+        for r in (req or {}).get("alt", []) or []:
+            await execute(
+                "INSERT INTO rank_requirements_alt (rank_from, rank_to, family_contracts, tuning_contracts, system_type) VALUES (?, ?, ?, ?, 'main')",
+                (r.get("rank_from"), r.get("rank_to"), r.get("family_contracts") or 0,
+                 r.get("tuning_contracts") or 0),
+            )
+    except Exception as e:
+        print(f"[ranks-pull] warn apply: {e}")
 
 
 async def nudge_site_contracts(bot):
