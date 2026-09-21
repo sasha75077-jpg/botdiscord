@@ -9,7 +9,7 @@ async def open_profile_panel(interaction: discord.Interaction):
         member = await guild.fetch_member(interaction.user.id)
 
     rank_name = await get_rank_name_from_discord(member)
-    embed = await build_profile_embed(str(member.id))
+    embed = await build_profile_embed(str(member.id), str(guild.id))
 
     for i, f in enumerate(embed.fields):
         if f.name == "Ранг":
