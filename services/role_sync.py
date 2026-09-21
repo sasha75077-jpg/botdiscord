@@ -41,7 +41,7 @@ def _api_get(path):
         return json.loads(r.read().decode("utf-8"))
 
 
-def _api_post(path, payload):
+def _api_post(path, payload, method="POST"):
     if not SYNC_SECRET:
         return
     req = urllib.request.Request(
@@ -49,7 +49,7 @@ def _api_post(path, payload):
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json", "Authorization": f"Bearer {SYNC_SECRET}",
                  "User-Agent": BROWSER_UA},
-        method="POST",
+        method=method,
     )
     with urllib.request.urlopen(req, timeout=10) as r:
         r.read()
@@ -379,6 +379,67 @@ async def _post_bonus_panel(bot, guild_id: str, report_id: int, discord_id: str,
         await channel.send(embed=embed, view=BonusActionView(report_id))
     except Exception as e:
         print(f"[bonus-poll] warn panel: {e}")
+
+
+async def poll_panel_tasks(bot):
+    """Забрать задачи постинга панелей с сайта и выполнить."""
+    if bot is None or not SYNC_SECRET:
+        return
+    try:
+        tasks = await asyncio.to_thread(_api_get, "/panels/tasks/pending")
+    except Exception as e:
+        print(f"[panels] warn fetch: {e}")
+        return
+    for t in tasks or []:
+        try:
+            result = await _execute_panel_task(bot, t)
+            await asyncio.to_thread(
+                _api_post, f"/panels/tasks/{t['id']}",
+                {"status": "done", "result": result}, "PUT")
+        except Exception as e:
+            print(f"[panels] warn exec {t.get('id')}: {e}")
+            try:
+                await asyncio.to_thread(
+                    _api_post, f"/panels/tasks/{t['id']}",
+                    {"status": "error", "result": str(e)[:500]}, "PUT")
+            except Exception:
+                pass
+
+
+async def _execute_panel_task(bot, t):
+    from database import set_setting as _set
+    guild = bot.get_guild(int(t["guild_id"]))
+    if guild is None:
+        raise RuntimeError("guild not found")
+    channel = guild.get_channel(int(t["channel_id"]))
+    if channel is None:
+        try:
+            channel = await guild.fetch_channel(int(t["channel_id"]))
+        except Exception:
+            raise RuntimeError("channel not found")
+    if t["panel_type"] == "admin_hub":
+        from cogs.admin_panel import build_admin_hub_embed, AdminHubView
+        embed = await build_admin_hub_embed(guild)
+        msg = await channel.send(embed=embed, view=AdminHubView())
+        try:
+            await msg.pin()
+        except Exception:
+            pass
+        await _set("admin_hub_channel_id", str(channel.id), str(guild.id))
+        await _set("admin_hub_message_id", str(msg.id), str(guild.id))
+        return f"admin_hub posted {msg.jump_url}"
+    else:
+        from services.public_panel_embed import build_public_panel_embed
+        from views.public_profile_panel import PublicProfilePanelView
+        embed = await build_public_panel_embed(guild)
+        msg = await channel.send(embed=embed, view=PublicProfilePanelView())
+        try:
+            await msg.pin()
+        except Exception:
+            pass
+        await _set("profile_panel_channel_id", str(channel.id), str(guild.id))
+        await _set("profile_panel_message_id", str(msg.id), str(guild.id))
+        return f"profile posted {msg.jump_url}"
 
 
 async def push_users(guild_id: str):

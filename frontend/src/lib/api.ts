@@ -201,6 +201,14 @@ export const bonusApi = {
     api.put(`/guilds/${guildId}/bonus/${id}/reject`, { reason }),
 };
 
+// Panels API (постинг панелей в Discord с сайта)
+export const panelsApi = {
+  enqueue: (data: { guild_id: string; panel_type: string; channel_id: string }) =>
+    api.post('/panels/tasks', data),
+  tasks: (guildId?: string) =>
+    api.get('/panels/tasks', { params: guildId ? { guild_id: guildId } : {} }),
+};
+
 // Prices API
 export const pricesApi = {
   list: () => api.get('/prices'),

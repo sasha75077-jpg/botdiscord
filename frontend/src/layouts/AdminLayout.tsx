@@ -35,6 +35,7 @@ export default function AdminLayout({ children }: Props) {
     { name: 'Заявки', href: '/applications', icon: ClipboardList },
     { name: 'Выплаты', href: '/prices', icon: Banknote },
     { name: 'Уведомления', href: '/notifications', icon: Bell },
+    { name: 'Панели', href: '/panels', icon: LayoutDashboard },
     { name: 'Настройки', href: '/settings', icon: Settings },
   ];
 

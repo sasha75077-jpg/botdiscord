@@ -837,6 +837,27 @@ class MainPanelView(View):
     async def personal_cooldowns_btn(self, interaction: discord.Interaction, button: Button):
         await show_personal_tuning_cooldown(interaction, MainPanelView, build_profile_embed)
 
+    @discord.ui.button(label="💲 Выплаты", style=discord.ButtonStyle.secondary)
+    async def payouts_btn(self, interaction: discord.Interaction, button: Button):
+        from cogs.admin_panel import build_prices_embed
+        embed = await build_prices_embed()
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @discord.ui.button(label="📝 Контракт", style=discord.ButtonStyle.primary)
+    async def contract_btn(self, interaction: discord.Interaction, button: Button):
+        embed = discord.Embed(
+            title="📝 Отправить контракт",
+            description="В Discord: команда `/контракт` (тип + скриншоты).\n"
+                        "На сайте: панель → Контракты → Отправить (со скриншотами).",
+            color=0x3498DB,
+        )
+        embed.add_field(
+            name="Сайт",
+            value="https://botdiscord-87a.pages.dev/contracts/new",
+            inline=False,
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
     @discord.ui.button(label="📊 Моя статистика", style=discord.ButtonStyle.secondary)
     async def my_stats_btn(self, interaction: discord.Interaction, button: Button):
         await interaction.response.defer()

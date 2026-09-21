@@ -18,7 +18,7 @@ async def build_public_panel_embed(guild: discord.Guild) -> discord.Embed:
     embed = discord.Embed(
         title="Панель игрока",
         description="Нажми кнопку ниже — профиль откроется только тебе.",
-        color=0x2B2D31
+        color=0x3498DB
     )
     embed.add_field(name="Меланхолики (онлайн)", value=str(online), inline=True)
     embed.add_field(name="Меланхолики (всего)", value=str(total), inline=True)

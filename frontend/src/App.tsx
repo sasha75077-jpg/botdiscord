@@ -20,6 +20,7 @@ import ContractsPage from '@/pages/contracts/ContractsPage';
 import ContractDetailPage from '@/pages/contracts/ContractDetailPage';
 import UsersPage from '@/pages/admin/UsersPage';
 import NotificationsPage from '@/pages/admin/NotificationsPage';
+import PanelsPage from '@/pages/admin/PanelsPage';
 import PricesPage from '@/pages/PricesPage';
 import BonusPage from '@/pages/BonusPage';
 import ProfilePage from '@/pages/ProfilePage';
@@ -91,6 +92,7 @@ function App() {
           <Route path="/users" element={<UsersPage />} />
           <Route path="/users" element={<div>Users</div>} />
           <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/panels" element={<PanelsPage />} />
           <Route path="/prices" element={<PricesPage />} />
           <Route path="/settings" element={<div>Settings</div>} />
           <Route path="*" element={<Navigate to="/" replace />} />
