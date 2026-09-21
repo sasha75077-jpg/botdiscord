@@ -93,6 +93,18 @@ class RoleSync(commands.Cog):
         except Exception as e:
             print(f"[role-sync] warn member_update: {e}")
 
+    @discord.app_commands.command(name="sync_roles", description="Сверить панельные роли с Discord-ролями сейчас")
+    async def sync_roles_cmd(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        if not interaction.guild:
+            return await interaction.followup.send("❌ Только на сервере.", ephemeral=True)
+        try:
+            await rs.pull_remote_state(str(interaction.guild.id))
+            n = await rs.reconcile_guild(self.bot, interaction.guild)
+            await interaction.followup.send(f"✅ Сверка готова, изменений: {n}.", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"❌ Ошибка: {e}", ephemeral=True)
+
 
 async def setup(bot):
     await bot.add_cog(RoleSync(bot))

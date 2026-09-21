@@ -4115,29 +4115,51 @@ async def show_bonus_detail(interaction: discord.Interaction, report_id: int):
 
 
 class BonusActionView(View):
-    def __init__(self, report_id: int):
-        super().__init__(timeout=300)
+    def __init__(self, report_id: int = 0):
+        super().__init__(timeout=None)
         self.report_id = report_id
 
-    @discord.ui.button(label="Добавить сумму к итогу за 'Дары моря'", style=discord.ButtonStyle.secondary)
+    def _resolve_id(self, interaction: discord.Interaction) -> int:
+        if self.report_id:
+            return int(self.report_id)
+        try:
+            title = (interaction.message.embeds[0].title if interaction.message and interaction.message.embeds else "") or ""
+            import re as _re
+            m = _re.search(r"#(\d+)", title)
+            if m:
+                return int(m.group(1))
+        except Exception:
+            pass
+        return 0
+
+    @discord.ui.button(label="Добавить сумму к итогу за 'Дары моря'", style=discord.ButtonStyle.secondary, custom_id="bonus:sea")
     async def add_sea_btn(self, interaction: discord.Interaction, button: Button):
+        rid = self._resolve_id(interaction)
+        if not rid:
+            return await interaction.response.send_message("❌ Не нашел отчет.", ephemeral=True)
         await interaction.response.send_modal(
             AddSeaAmountModal(
-                self.report_id,
+                rid,
                 channel_id=int(interaction.channel.id) if interaction.channel else 0,
                 message_id=int(interaction.message.id) if interaction.message else 0
             )
         )
 
-    @discord.ui.button(label="Одобрить", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Одобрить", style=discord.ButtonStyle.success, custom_id="bonus:approve")
     async def approve_btn(self, interaction: discord.Interaction, button: Button):
-        await approve_bonus(interaction, self.report_id)
+        rid = self._resolve_id(interaction)
+        if not rid:
+            return await interaction.response.send_message("❌ Не нашел отчет.", ephemeral=True)
+        await approve_bonus(interaction, rid)
 
-    @discord.ui.button(label="Отклонить", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="Отклонить", style=discord.ButtonStyle.danger, custom_id="bonus:reject")
     async def rejectbtn(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.send_modal(RejectBonusModal(self.report_id))
+        rid = self._resolve_id(interaction)
+        if not rid:
+            return await interaction.response.send_message("❌ Не нашел отчет.", ephemeral=True)
+        await interaction.response.send_modal(RejectBonusModal(rid))
 
-    @discord.ui.button(label="← Назад к списку", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="← Назад к списку", style=discord.ButtonStyle.primary, custom_id="bonus:back")
     async def back_btn(self, interaction: discord.Interaction, button: Button):
         await show_bonus_reports(interaction, page=0)
 
@@ -4405,3 +4427,4 @@ ADMIN_PANEL_MSG_KEY = "admin_panel_message_id"
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(AdminPanel(bot))
+    bot.add_view(BonusActionView(0))
