@@ -203,15 +203,19 @@ guilds.get('/:guildId/dashboard', async (c) => {
     return c.json({ error: 'Forbidden' }, 403)
   }
   const payload: any = await verifyToken(header.substring(7), c.env.SECRET_KEY)
-  if (!payload || !payload.discord_id) {
+  if (!payload) {
     return c.json({ error: 'Forbidden' }, 403)
   }
+  const isOwner = payload.user_type === 'owner'
 
   const guildId = c.req.param('guildId')
-  if (payload.user_type !== 'owner' && payload.guild_id !== guildId) {
+  if (!isOwner && payload.guild_id !== guildId) {
     return c.json({ error: 'Forbidden' }, 403)
   }
-  const discordId = payload.discord_id as string
+  if (!isOwner && !payload.discord_id) {
+    return c.json({ error: 'Forbidden' }, 403)
+  }
+  const discordId = (payload.discord_id || '') as string
 
   // Онлайн/всего участников + имя сервера
   let membersTotal: number | null = null
