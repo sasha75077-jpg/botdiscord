@@ -3589,7 +3589,9 @@ async def approve_contract(interaction: discord.Interaction, contract_id: int):
 
     # было просто: await audit_contracts(...)
     try:
-        await audit_contracts(interaction.client, log)
+        await audit_contracts(
+            interaction.client, log,
+            str(interaction.guild.id) if interaction.guild else (contract.get("guild_id") or None))
     except Exception as e:
         # не ломаем весь флоу, но даём модератору знать, что лог не ушёл
         text = f"⚠️ Контракт принят, но не смог отправить лог: {type(e).__name__}: {e}"
@@ -3717,7 +3719,9 @@ class RejectReasonModal(Modal, title="Причина отклонения"):
             link = f"https://discord.com/channels/{GUILD_ID}/{contract['channel_id']}/{contract['discord_message_id']}"
             log.add_field(name="Source", value=f"[Открыть]({link})", inline=False)
 
-        await audit_contracts(interaction.client, log)
+        await audit_contracts(
+            interaction.client, log,
+            str(interaction.guild.id) if interaction.guild else (contract.get("guild_id") or None))
 
         try:
             user_obj = await interaction.client.fetch_user(int(discord_id))

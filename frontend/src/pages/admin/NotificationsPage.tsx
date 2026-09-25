@@ -22,6 +22,7 @@ export default function NotificationsPage() {
   const [bonusChannel, setBonusChannel] = useState('');
   const [promoChannel, setPromoChannel] = useState('');
   const [promoReportsChannel, setPromoReportsChannel] = useState('');
+  const [auditChannel, setAuditChannel] = useState('');
   const [promoPingIds, setPromoPingIds] = useState<string[]>([]);
   const [pingIds, setPingIds] = useState<string[]>([]);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -51,6 +52,7 @@ export default function NotificationsPage() {
     setBonusChannel(s.bonus_log_channel_id || '');
     setPromoChannel(s.promo_panel_channel_id || s.promo_log_channel_id || '');
     setPromoReportsChannel(s.promo_log_channel_id || '');
+    setAuditChannel(s.contracts_audit_channel_id || '');
     setPromoPingIds(String(s.promo_ping_role_ids || '').split(',').map((x: string) => x.trim()).filter(Boolean));
     setPingIds(String(s.contracts_ping_role_ids || '').split(',').map((x: string) => x.trim()).filter(Boolean));
   }, [settings]);
@@ -65,6 +67,7 @@ export default function NotificationsPage() {
         bonus_log_channel_id: bonusChannel,
         promo_panel_channel_id: promoChannel,
         promo_log_channel_id: promoReportsChannel,
+        contracts_audit_channel_id: auditChannel,
         promo_ping_role_ids: promoPingIds.join(','),
         contracts_ping_role_ids: pingIds.join(','),
       }),
@@ -205,6 +208,20 @@ export default function NotificationsPage() {
           ))}
           {roles.length === 0 && <p className="px-3 py-4 text-sm text-gray-500">Нет ролей</p>}
         </div>
+      </div>
+
+      <div className="card">
+        <h2 className="text-xl font-bold mb-1">Канал аудита контрактов</h2>
+        <p className="text-sm text-gray-500 mb-3">
+          Сюда падает табличка «Контракт принят/отклонен». Отдельно на каждый сервер.
+        </p>
+        <label className="block text-sm font-medium mb-2">Канал</label>
+        <select value={auditChannel} onChange={(e) => setAuditChannel(e.target.value)} className="input w-full max-w-md">
+          <option value="">— не выбран (общий лог) —</option>
+          {channels.map((ch: any) => (
+            <option key={ch.id} value={ch.id}># {ch.name}</option>
+          ))}
+        </select>
       </div>
 
       <div className="card">

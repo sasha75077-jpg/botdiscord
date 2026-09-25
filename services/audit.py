@@ -18,7 +18,19 @@ async def send_audit_log(client: discord.Client, embed: discord.Embed, key: str)
     except (discord.Forbidden, discord.NotFound, discord.HTTPException):
         return False
 
-async def audit_contracts(client, embed):   return await send_audit_log(client, embed, "log_contracts")
+async def audit_contracts(client, embed, guild_id: str | None = None):
+    # Сначала per-guild канал (настраивается на сайте), потом глобальный
+    if guild_id:
+        try:
+            raw = await get_setting("contracts_audit_channel_id", str(guild_id))
+            if raw and str(raw).strip().isdigit():
+                ch = client.get_channel(int(raw)) or await client.fetch_channel(int(raw))
+                await ch.send(embed=embed)
+                return True
+        except Exception:
+            pass
+    return await send_audit_log(client, embed, "log_contracts")
+
 async def audit_bonus(client, embed):       return await send_audit_log(client, embed, "log_bonus")
 async def audit_promotions(client, embed):  return await send_audit_log(client, embed, "log_promo")
 
