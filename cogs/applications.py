@@ -310,7 +310,7 @@ class ApplicationModal(discord.ui.Modal):
             print(f"[ApplicationsCog] site dup check warn: {e}")
         app_id = str(uuid.uuid4())
         await execute(
-            "INSERT INTO applications (id, discord_user_id, guild_id, created_at, status, answers) VALUES (?, ?, ?, ?, 'PENDING', ?)",
+            "INSERT INTO applications (id, discord_user_id, guild_id, created_at, status, answers, log_channel_id, log_message_id) VALUES (?, ?, ?, ?, 'PENDING', ?, '', '')",
             (app_id, str(interaction.user.id), str(guild.id), now_iso(), json.dumps(answers, ensure_ascii=False)),
         )
         ch = await get_log_channel(guild)
