@@ -175,7 +175,7 @@ bonus.get('/:guildId/bonus', async (c) => {
   query += ' ORDER BY created_at DESC LIMIT 200'
 
   const result = await c.env.DB.prepare(query).bind(...params).all()
-  const items = await enrichMany(c.env, result.results, 'discord_id')
+  const items = await enrichMany(c.env, result.results, 'recipient_discord_id')
   return c.json(items)
 })
 
