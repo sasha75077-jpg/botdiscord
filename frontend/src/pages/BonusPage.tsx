@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { bonusApi, usersApi } from '@/lib/api';
+import { bonusApi } from '@/lib/api';
+import { contractsApi } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { Award, Send, Download, CheckCircle, XCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -23,7 +24,6 @@ export default function BonusPage() {
   const isStaff = isAdmin || user?.role === 'recruiter';
   const [filterUser, setFilterUser] = useState('');
   const [msg, setMsg] = useState('');
-  const [myStatic, setMyStatic] = useState<string | null>(null);
   const [exportWeek, setExportWeek] = useState({ start: '', end: '' });
   const [exportComment, setExportComment] = useState('');
 
@@ -48,11 +48,22 @@ export default function BonusPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['bonus', guildId] }),
     onError: (e: any) => setMsg(e.response?.data?.error || 'Ошибка решения'),
   });
-  const saveStatic = useMutation({
-    mutationFn: () => usersApi.setMyStatic(guildId, myStatic || ''),
-    onSuccess: () => setMsg('Static сохранен'),
-    onError: (e: any) => setMsg(e.response?.data?.error || 'Ошибка сохранения static'),
+  const { data: myContracts } = useQuery({
+    queryKey: ['my-approved', guildId],
+    queryFn: async () => (await contractsApi.list(guildId, { status: 'approved', limit: 200 })).data,
+    enabled: !!guildId && !isStaff,
   });
+
+  const weekStart = (() => {
+    const now = new Date();
+    const day = (now.getUTCDay() + 6) % 7;
+    const mon = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - day));
+    return mon.toISOString().slice(0, 10);
+  })();
+  const myWeek = ((Array.isArray(myContracts) ? myContracts : []) as any[]).filter(
+    (c: any) => (c.created_at || '').slice(0, 10) >= weekStart
+  );
+  const myWeekSum = myWeek.reduce((s: number, c: any) => s + Number(c.price || 0), 0);
 
   const reports: any[] = Array.isArray(data) ? data : [];
 
@@ -116,20 +127,27 @@ export default function BonusPage() {
         </div>
       )}
 
-      <div className="card">
-        <label className="block text-sm font-medium mb-2">Мой static для выгрузки</label>
-        <div className="flex gap-2">
-          <input
-            value={myStatic ?? ''}
-            onChange={(e) => setMyStatic(e.target.value)}
-            placeholder={user?.discord_id || 'static'}
-            className="input flex-1"
-          />
-          <button onClick={() => saveStatic.mutate()} className="btn btn-secondary text-sm">
-            Сохранить
-          </button>
+      {!isStaff && (
+        <div className="card bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-blue-200 dark:border-blue-800">
+          <p className="text-sm text-blue-700 dark:text-blue-300 font-medium">
+            Принято за неделю: {myWeek.length} • на сумму {myWeekSum.toLocaleString('ru-RU')}
+          </p>
+          {myWeek.length > 0 ? (
+            <ul className="mt-2 space-y-1 text-sm">
+              {myWeek.map((c: any) => (
+                <li key={c.id}>
+                  <Link to={`/contracts/${c.id}`} className="hover:underline">
+                    #{c.id}
+                  </Link>{' '}
+                  • {c.contract_type} • {c.price} • {(c.created_at || '').slice(0, 10)}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-gray-500 mt-1">Пока пусто — прими участие и подай премию.</p>
+          )}
         </div>
-      </div>
+      )}
 
       {isAdmin && (
         <div className="card">

@@ -626,15 +626,23 @@ async def _mirror_site_contract(bot, guild_id: str, r: dict):
         if str(r.get("status") or "pending") != "pending":
             return  # старые решения без локальной строки не трогаем
         details = r.get("details")
+        created = r.get("created_at") or ""
+        day_iso = str(created)[:10]
+        day_msk = ""
+        try:
+            y, m, d = day_iso.split("-")
+            day_msk = f"{d}-{m}-{y}"
+        except Exception:
+            pass
         await execute(
             """INSERT INTO contracts
-               (guild_id, ts, discord_id, contract_type, price, details, confirm_status, source_status, site_id, claimed_by, claimed_at)
-               VALUES (?, ?, ?, ?, ?, ?, 'PENDING', 'SITE', ?, ?, ?)""",
+               (guild_id, ts, discord_id, contract_type, price, details, confirm_status, source_status, site_id, claimed_by, claimed_at, msk_date, msk_date_iso)
+               VALUES (?, ?, ?, ?, ?, ?, 'PENDING', 'SITE', ?, ?, ?, ?, ?)""",
             (guild_id, r.get("created_at"), str(r.get("discord_id")),
              str(r.get("contract_type")),
              float(r.get("price") or 0),
              json.dumps(details, ensure_ascii=False) if details else None,
-             site_id, r.get("claimed_by"), r.get("claimed_at")),
+             site_id, r.get("claimed_by"), r.get("claimed_at"), day_msk, day_iso),
         )
         try:
             await execute(
