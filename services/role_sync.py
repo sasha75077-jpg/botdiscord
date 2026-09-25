@@ -309,10 +309,11 @@ async def poll_site_bonus(bot=None):
 
 
 async def _poll_guild_bonus(guild_id: str):
+    # Все изменения с сайта (без фильтра статуса): новые заявки + решения.
     cursor = await get_setting("bonus_poll_cursor", guild_id) or "1970-01-01 00:00:00"
     try:
         data = await asyncio.to_thread(
-            _api_get, f"/guilds/{guild_id}/bonus?status=pending&since={urllib.parse.quote(cursor)}")
+            _api_get, f"/guilds/{guild_id}/bonus?since={urllib.parse.quote(cursor)}")
     except Exception as e:
         print(f"[bonus-poll] warn api: {e}")
         return
@@ -325,40 +326,149 @@ async def _poll_guild_bonus(guild_id: str):
                 newest = ts
             if not r.get("id"):
                 continue
-            exists = await fetch_one("SELECT report_id FROM bonus_reports WHERE site_id = ?", (r["id"],))
-            if exists:
-                continue
+            site_id = int(r["id"])
+            site_status = str(r.get("status") or "pending").lower()
+            local = await fetch_one("SELECT * FROM bonus_reports WHERE site_id = ?", (site_id,))
+            if local is None:
+                # Строка создана ботом и уже уполовинена на сайт: ищем по external_id
+                ext = str(r.get("external_id") or "")
+                if ext and not ext.startswith("site:") and ext.isdigit():
+                    local = await fetch_one(
+                        "SELECT * FROM bonus_reports WHERE report_id = ?", (int(ext),))
+                    if local is not None:
+                        try:
+                            await execute(
+                                "UPDATE bonus_reports SET site_id = ? WHERE report_id = ?",
+                                (site_id, int(ext)))
+                            local = await fetch_one(
+                                "SELECT * FROM bonus_reports WHERE report_id = ?", (int(ext),))
+                        except Exception:
+                            pass
             week = str(r.get("reason") or "")
             ws, we = (week.split("..") + ["", ""])[:2]
             if not ws:
                 ws, we = (r.get("week_start") or ""), (r.get("week_end") or "")
-            await execute(
-                """INSERT INTO bonus_reports
-                   (guild_id, discord_id, week_start, week_end, total_amount,
-                    contracts_json, submitted_at, status, site_id)
-                   VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'NEW', ?)""",
-                (guild_id, str(r.get("recipient_discord_id") or r.get("discord_id")),
-                 ws, we, float(r.get("amount") or 0),
-                 r.get("contracts_json") or "[]", r["id"]),
-            )
-            rep = await fetch_one(
-                "SELECT report_id FROM bonus_reports WHERE site_id = ?", (r["id"],))
-            if rep:
-                await _post_bonus_panel(_POLL_BOT, guild_id, int(rep["report_id"]),
-                                        str(r.get("recipient_discord_id") or r.get("discord_id")),
-                                        ws, we)
+            if local is None:
+                local_status = {"approved": "APPROVED", "rejected": "REJECTED"}.get(
+                    site_status, "NEW")
+                await execute(
+                    """INSERT INTO bonus_reports
+                       (guild_id, discord_id, week_start, week_end, total_amount,
+                        contracts_json, submitted_at, status, site_id)
+                       VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)""",
+                    (guild_id, str(r.get("recipient_discord_id") or r.get("discord_id")),
+                     ws, we, float(r.get("amount") or 0),
+                     r.get("contracts_json") or "[]", local_status, site_id),
+                )
+                rep = await fetch_one(
+                    "SELECT report_id FROM bonus_reports WHERE site_id = ?", (site_id,))
+                if not rep:
+                    continue
+                local_rid = int(rep["report_id"])
+                if site_status == "pending":
+                    await _post_bonus_panel(_POLL_BOT, guild_id, local_rid,
+                                            str(r.get("recipient_discord_id") or r.get("discord_id")),
+                                            ws, we, site_id)
+                else:
+                    await _post_bonus_decided(_POLL_BOT, guild_id, local_rid,
+                                              str(r.get("recipient_discord_id") or r.get("discord_id")),
+                                              ws, we, site_id, site_status,
+                                              float(r.get("amount") or 0))
+                continue
+            # Зеркало решения с сайта: правим локальный статус и гасим кнопки
+            local_st = str(local.get("status") or "NEW").upper()
+            want = {"pending": "NEW", "approved": "APPROVED",
+                    "rejected": "REJECTED"}.get(site_status, "NEW")
+            if want != local_st and want in ("APPROVED", "REJECTED"):
+                try:
+                    await execute(
+                        """UPDATE bonus_reports
+                           SET status = ?, decision = ?, total_amount = ?
+                           WHERE report_id = ?""",
+                        (want, want, float(r.get("amount") or local.get("total_amount") or 0),
+                         int(local["report_id"])),
+                    )
+                except Exception:
+                    pass
+                await _edit_bonus_panel_to_decided(
+                    _POLL_BOT, guild_id, int(local["report_id"]), want)
         except Exception as e:
             print(f"[bonus-poll] warn row: {e}")
     if newest != cursor:
         await set_setting("bonus_poll_cursor", newest, guild_id)
 
 
+async def _edit_bonus_panel_to_decided(bot, guild_id: str, report_id: int, decided: str):
+    """После решения на сайте: обновить эмбед в Discord и убрать кнопки."""
+    if bot is None:
+        return
+    try:
+        from cogs.admin_panel import update_bonus_audit_message
+        await update_bonus_audit_message(bot, report_id)
+        row = await fetch_one(
+            "SELECT audit_channel_id, audit_msg_id FROM bonus_reports WHERE report_id = ?",
+            (report_id,))
+        if not row or not row.get("audit_channel_id") or not row.get("audit_msg_id"):
+            return
+        try:
+            ch = bot.get_channel(int(row["audit_channel_id"]))
+            if ch is None:
+                ch = await bot.fetch_channel(int(row["audit_channel_id"]))
+            msg = await ch.fetch_message(int(row["audit_msg_id"]))
+            await msg.edit(view=None)
+        except Exception:
+            pass
+    except Exception as e:
+        print(f"[bonus-poll] warn decided edit: {e}")
+
+
+async def _post_bonus_decided(bot, guild_id: str, report_id: int, discord_id: str,
+                              week_start: str, week_end: str,
+                              site_id: int, site_status: str, amount: float):
+    """Уже решенная на сайте премия: информационный пост без кнопок."""
+    if bot is None:
+        return
+    try:
+        guild = bot.get_guild(int(guild_id))
+        if guild is None:
+            return
+        ch_id = await get_setting("bonus_log_channel_id", guild_id)
+        if not ch_id:
+            ch_id = await get_setting("bonus_channel_id")
+        if not ch_id:
+            return
+        channel = guild.get_channel(int(ch_id))
+        if channel is None:
+            try:
+                channel = await guild.fetch_channel(int(ch_id))
+            except Exception:
+                return
+        decided = (site_status or "").lower() == "approved"
+        color = 0x2ECC71 if decided else 0xE74C3C
+        title = (f"✅ Премия #{report_id} (сайт #{site_id}) принята на сайте"
+                 if decided else f"❌ Премия #{report_id} (сайт #{site_id}) отклонена на сайте")
+        embed = discord.Embed(title=title, color=color)
+        embed.add_field(name="Пользователь", value=f"<@{discord_id}>", inline=True)
+        embed.add_field(name="Неделя", value=f"{week_start} — {week_end}", inline=True)
+        embed.add_field(name="Итого", value=str(round(float(amount or 0), 2)), inline=True)
+        msg = await channel.send(embed=embed)
+        try:
+            await execute(
+                "UPDATE bonus_reports SET audit_channel_id=?, audit_msg_id=? WHERE report_id=?",
+                (str(channel.id), str(msg.id), report_id),
+            )
+        except Exception:
+            pass
+    except Exception as e:
+        print(f"[bonus-poll] warn decided panel: {e}")
+
+
 _POLL_BOT = None
 
 
 async def _post_bonus_panel(bot, guild_id: str, report_id: int, discord_id: str,
-                            week_start: str, week_end: str):
-    """Панелька премии с сайта в бонус-канал + кнопки."""
+                            week_start: str, week_end: str, site_id: int = 0):
+    """Панелька премии с сайта в бонус-канал: принять/отклонить, без кнопки Назад."""
     if bot is None:
         return
     try:
@@ -377,7 +487,8 @@ async def _post_bonus_panel(bot, guild_id: str, report_id: int, discord_id: str,
                 channel = await guild.fetch_channel(int(ch_id))
             except Exception:
                 return
-        embed = discord.Embed(title=f"💰 Премия #{report_id} (с сайта)", color=0x9B59B6)
+        site_tag = f" (сайт #{site_id})" if site_id else " (с сайта)"
+        embed = discord.Embed(title=f"💰 Премия #{report_id}{site_tag}", color=0x9B59B6)
         embed.add_field(name="Пользователь", value=f"<@{discord_id}>", inline=True)
         embed.add_field(name="Неделя", value=f"{week_start} — {week_end}", inline=True)
         try:
@@ -393,7 +504,18 @@ async def _post_bonus_panel(bot, guild_id: str, report_id: int, discord_id: str,
             embed.add_field(name="Итого (live)", value=str(round(live_total, 2)), inline=False)
         except Exception as e:
             print(f"[bonus-poll] warn sums: {e}")
-        await channel.send(embed=embed, view=BonusActionView(report_id))
+        view = BonusActionView(report_id)
+        for item in list(view.children):
+            if getattr(item, "custom_id", "") == "bonus:back":
+                view.remove_item(item)
+        msg = await channel.send(embed=embed, view=view)
+        try:
+            await execute(
+                "UPDATE bonus_reports SET audit_channel_id=?, audit_msg_id=? WHERE report_id=?",
+                (str(channel.id), str(msg.id), report_id),
+            )
+        except Exception:
+            pass
     except Exception as e:
         print(f"[bonus-poll] warn panel: {e}")
 

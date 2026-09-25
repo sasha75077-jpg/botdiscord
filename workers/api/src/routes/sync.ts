@@ -66,11 +66,22 @@ sync.post('/:guildId/bonus-reports/sync', async (c) => {
   const guildId = c.req.param('guildId')
   const body = await c.req.json<{
     external_id: string; discord_id: string; amount?: number; status?: string; reason?: string
+    week_start?: string; week_end?: string; contracts_json?: string
   }>()
   if (!body.external_id || !body.discord_id) {
     return c.json({ error: 'Missing external_id or discord_id' }, 400)
   }
   const status = mapStatus(body.status, { NEW: 'pending', TAKEN: 'pending' })
+
+  // Неделя: явные поля, иначе из reason вида "YYYY-MM-DD..YYYY-MM-DD"
+  let weekStart = (body.week_start || '').trim() || null as string | null
+  let weekEnd = (body.week_end || '').trim() || null as string | null
+  if ((!weekStart || !weekEnd) && (body.reason || '').includes('..')) {
+    const [ws, we] = (body.reason as string).split('..')
+    if (/^\d{4}-\d{2}-\d{2}$/.test((ws || '').trim())) weekStart = ws.trim()
+    if (/^\d{4}-\d{2}-\d{2}$/.test((we || '').trim())) weekEnd = we.trim()
+  }
+  const contractsJson = body.contracts_json || '[]'
 
   // external_id вида "site:<id>" - строка создана сайтом, ищем по id
   let existing = null as { id: number } | null
@@ -86,14 +97,17 @@ sync.post('/:guildId/bonus-reports/sync', async (c) => {
 
   if (existing) {
     await c.env.DB.prepare(
-      'UPDATE bonus_reports SET amount = ?, status = ?, reason = ? WHERE id = ?'
-    ).bind(body.amount ?? 0, status, body.reason || null, existing.id).run()
+      `UPDATE bonus_reports SET amount = ?, status = ?, reason = ?,
+        week_start = COALESCE(?, week_start), week_end = COALESCE(?, week_end),
+        contracts_json = COALESCE(?, contracts_json),
+        updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+    ).bind(body.amount ?? 0, status, body.reason || null, weekStart, weekEnd, contractsJson, existing.id).run()
     return c.json({ id: existing.id, updated: true })
   }
   const res = await c.env.DB.prepare(
-    `INSERT INTO bonus_reports (external_id, guild_id, reporter_discord_id, recipient_discord_id, recipient_nickname, bonus_type, amount, status, reason)
-     VALUES (?, ?, ?, ?, ?, 'weekly', ?, ?, ?)`
-  ).bind(body.external_id, guildId, body.discord_id, body.discord_id, body.discord_id, body.amount ?? 0, status, body.reason || null).run()
+    `INSERT INTO bonus_reports (external_id, guild_id, reporter_discord_id, recipient_discord_id, recipient_nickname, bonus_type, amount, status, reason, week_start, week_end, contracts_json)
+     VALUES (?, ?, ?, ?, ?, 'weekly', ?, ?, ?, ?, ?, ?)`
+  ).bind(body.external_id, guildId, body.discord_id, body.discord_id, body.discord_id, body.amount ?? 0, status, body.reason || null, weekStart, weekEnd, contractsJson).run()
   return c.json({ id: res.meta.last_row_id, created: true })
 })
 

@@ -705,7 +705,8 @@ async def update_bonus_audit_message(client: discord.Client, report_id: int):
     elif status == "TAKEN":
         color = 0xF1C40F
 
-    e = discord.Embed(title=f"💰 Премия #{r['report_id']}", color=color)
+    site_tag = f" (сайт #{r['site_id']})" if r.get("site_id") else ""
+    e = discord.Embed(title=f"💰 Премия #{r['report_id']}{site_tag}", color=color)
     e.add_field(name="Пользователь", value=f"<@{r['discord_id']}>", inline=True)
     e.add_field(name="Неделя", value=f"{r['week_start']} — {r['week_end']} (МСК)", inline=True)
     e.add_field(name="Статус", value=status, inline=True)

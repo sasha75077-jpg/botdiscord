@@ -89,7 +89,7 @@ def queue_application_sync(guild_id, app_id, discord_id, status="PENDING", reaso
 
 
 def queue_bonus_sync(guild_id, report_id, discord_id, amount=0, status="NEW", reason=None,
-                     external_id=None):
+                     external_id=None, week_start=None, week_end=None):
     """Синхронизация премии. external_id по умолчанию = report_id бота;
     для строк-зеркал с сайта - 'site:<id>'."""
     if not guild_id or not report_id or not discord_id:
@@ -100,6 +100,8 @@ def queue_bonus_sync(guild_id, report_id, discord_id, amount=0, status="NEW", re
         "amount": amount or 0,
         "status": status or "NEW",
         "reason": reason,
+        "week_start": week_start,
+        "week_end": week_end,
     })
 
 

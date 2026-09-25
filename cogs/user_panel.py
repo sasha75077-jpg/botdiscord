@@ -640,6 +640,17 @@ class BonusPreviewPagerView(discord.ui.View):
             except Exception as e:
                 print(f"Audit log failed for report {self.report_id}: {e}")
 
+        # Пуш премии на сайт, чтобы ее было видно и можно было решить в панели
+        try:
+            from services.api_sync import queue_bonus_sync
+            _bg = str(interaction.guild.id) if interaction.guild else (self.gid or "")
+            queue_bonus_sync(_bg, int(self.report_id), str(self.uid),
+                             amount=float(total), status="NEW",
+                             reason=f"{self.week_start}..{self.week_end}",
+                             week_start=self.week_start, week_end=self.week_end)
+        except Exception as e:
+            print(f"[api_sync] warn bonus push {self.report_id}: {e}")
+
         embed = await build_profile_embed(self.uid, self.gid)
         embed.description = (
             f"✅ Отчёт на премию отправлен на рассмотрение (ID {self.report_id}).\n"

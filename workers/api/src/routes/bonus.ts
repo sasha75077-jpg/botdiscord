@@ -264,7 +264,7 @@ bonus.put('/:guildId/bonus/:id/approve', async (c) => {
   const amount = calc.total
 
   await c.env.DB.prepare(
-    'UPDATE bonus_reports SET status = ?, amount = ? WHERE id = ?'
+    'UPDATE bonus_reports SET status = ?, amount = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
   ).bind('approved', amount, id).run()
   const updated = await c.env.DB.prepare('SELECT * FROM bonus_reports WHERE id = ?').bind(id).first()
   return c.json({ ...updated as object, calc })
@@ -291,7 +291,7 @@ bonus.put('/:guildId/bonus/:id/reject', async (c) => {
   }
 
   await c.env.DB.prepare(
-    'UPDATE bonus_reports SET status = ?, reason = ? WHERE id = ?'
+    'UPDATE bonus_reports SET status = ?, reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
   ).bind('rejected', body.reason || row.reason, id).run()
   const updated = await c.env.DB.prepare('SELECT * FROM bonus_reports WHERE id = ?').bind(id).first()
   return c.json(updated)

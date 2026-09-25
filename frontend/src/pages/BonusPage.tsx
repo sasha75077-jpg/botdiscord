@@ -231,6 +231,7 @@ export default function BonusPage() {
                 <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
                   <p className="font-semibold">
                     💰 Премия #{r.id} • {r.person?.username || r.discord_id || r.recipient_discord_id}
+                    {r.external_id && !String(r.external_id).startsWith('site:') ? ` • Discord #${r.external_id}` : ''}
                   </p>
                   <span className="px-3 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-dark-700">
                     {r.status} • {r.week_start}..{r.week_end} • {r.amount}
