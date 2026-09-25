@@ -88,7 +88,17 @@ apps.get('/:guildId/applications', async (c) => {
   return c.json({ applications: items })
 })
 
-// GET /guilds/:guildId/applications/:id - одна заявка (staff + сам кандидат)
+// GET /guilds/:guildId/applications/open?discord_id= - открытая заявка юзера (бот)
+apps.get('/:guildId/applications/open', async (c) => {
+  if (!isBot(c, c.env)) return c.json({ error: 'Forbidden' }, 403)
+  const guildId = c.req.param('guildId')
+  const discordId = c.req.query('discord_id')
+  if (!discordId) return c.json({ error: 'Missing discord_id' }, 400)
+  const row: any = await c.env.DB.prepare(
+    "SELECT id, status, created_at FROM applications WHERE guild_id = ? AND discord_id = ? AND status = 'pending' LIMIT 1"
+  ).bind(guildId, discordId).first()
+  return c.json({ open: row || null })
+})
 apps.get('/:guildId/applications/:id', async (c) => {
   const guildId = c.req.param('guildId')
   const id = c.req.param('id')

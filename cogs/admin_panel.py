@@ -62,9 +62,15 @@ class ApplicationsRolesView(discord.ui.View):
         self.accept_role_ids: list[int] = []
         self.reject_remove_role_ids: list[int] = []
 
-    async def _load(self):
-        self.accept_role_ids = _csv_to_role_ids(await get_setting(SET_ACCEPT_ROLES_KEY))
-        self.reject_remove_role_ids = _csv_to_role_ids(await get_setting(SET_REJECT_ROLES_KEY))
+    async def _load(self, guild_id: str | None = None):
+        accept = await get_setting(SET_ACCEPT_ROLES_KEY, guild_id)
+        if not accept:
+            accept = await get_setting(SET_ACCEPT_ROLES_KEY)
+        reject = await get_setting(SET_REJECT_ROLES_KEY, guild_id)
+        if not reject:
+            reject = await get_setting(SET_REJECT_ROLES_KEY)
+        self.accept_role_ids = _csv_to_role_ids(accept)
+        self.reject_remove_role_ids = _csv_to_role_ids(reject)
 
     def build_embed(self) -> discord.Embed:
         e = discord.Embed(
@@ -82,11 +88,12 @@ class ApplicationsRolesView(discord.ui.View):
         return e
 
     async def open_edit(self, interaction: discord.Interaction):
-        await self._load()
+        await self._load(str(interaction.guild.id) if interaction.guild else None)
         await interaction.response.edit_message(content=None, embed=self.build_embed(), view=self)
 
     async def open_msg_edit(self, message: discord.Message):
-        await self._load()
+        _og = str(message.guild.id) if getattr(message, "guild", None) else None
+        await self._load(_og)
         await message.edit(content=None, embed=self.build_embed(), view=self)
 
     @discord.ui.button(label="✅ Выдать при принятии (выбор)", style=discord.ButtonStyle.success)
@@ -94,7 +101,7 @@ class ApplicationsRolesView(discord.ui.View):
         if not interaction.guild:
             return await interaction.response.send_message("❌ Только на сервере.", ephemeral=True)
 
-        await self._load()
+        await self._load(str(interaction.guild.id))
         v = PickRolesOnceView(
             mode="accept",
             parent=self,
@@ -111,7 +118,7 @@ class ApplicationsRolesView(discord.ui.View):
         if not interaction.guild:
             return await interaction.response.send_message("❌ Только на сервере.", ephemeral=True)
 
-        await self._load()
+        await self._load(str(interaction.guild.id))
         v = PickRolesOnceView(
             mode="reject_remove",
             parent=self,
@@ -125,8 +132,9 @@ class ApplicationsRolesView(discord.ui.View):
 
     @discord.ui.button(label="🧹 Очистить", style=discord.ButtonStyle.secondary)
     async def clear_all(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await set_setting(SET_ACCEPT_ROLES_KEY, "")
-        await set_setting(SET_REJECT_ROLES_KEY, "")
+        _cg = str(interaction.guild.id) if interaction.guild else None
+        await set_setting(SET_ACCEPT_ROLES_KEY, "", _cg)
+        await set_setting(SET_REJECT_ROLES_KEY, "", _cg)
         await self.open_edit(interaction)
 
     @discord.ui.button(label="⬅️ Назад", style=discord.ButtonStyle.secondary)
@@ -146,10 +154,11 @@ class PickRolesOnceView(discord.ui.View):
 
     @discord.ui.button(label="💾 Сохранить", style=discord.ButtonStyle.primary)
     async def save(self, interaction: discord.Interaction, button: discord.ui.Button):
+        _sg = str(interaction.guild.id) if interaction.guild else None
         if self.mode == "accept":
-            await set_setting(SET_ACCEPT_ROLES_KEY, _role_ids_to_csv(self.selected_ids))
+            await set_setting(SET_ACCEPT_ROLES_KEY, _role_ids_to_csv(self.selected_ids), _sg)
         elif self.mode == "reject_remove":
-            await set_setting(SET_REJECT_ROLES_KEY, _role_ids_to_csv(self.selected_ids))
+            await set_setting(SET_REJECT_ROLES_KEY, _role_ids_to_csv(self.selected_ids), _sg)
         else:
             return await interaction.response.edit_message(content="❌ Unknown mode.", view=self)
 

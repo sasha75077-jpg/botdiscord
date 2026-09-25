@@ -288,6 +288,23 @@ class ApplicationModal(discord.ui.Modal):
         )
         if dup:
             return await interaction.response.send_message("❌ У тебя уже есть открытая или принятая заявка.", ephemeral=True)
+        # + проверка сайта (там может висеть несинкнутая)
+        try:
+            import urllib.request as _u, json as _j, os as _o
+            _key = _o.getenv("PANEL_SYNC_SECRET", "")
+            _api = _o.getenv("PANEL_API_URL", "https://melancholia-api.sasha75077.workers.dev").rstrip("/")
+            if _key:
+                _req = _u.Request(
+                    f"{_api}/guilds/{guild.id}/applications/open?discord_id={interaction.user.id}",
+                    headers={"Authorization": f"Bearer {_key}",
+                             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+                    method="GET")
+                with _u.urlopen(_req, timeout=10) as _r:
+                    _d = _j.loads(_r.read().decode("utf-8"))
+                if (_d or {}).get("open"):
+                    return await interaction.response.send_message("❌ У тебя уже есть открытая заявка (на сайте).", ephemeral=True)
+        except Exception as e:
+            print(f"[ApplicationsCog] site dup check warn: {e}")
         app_id = str(uuid.uuid4())
         await execute(
             "INSERT INTO applications (id, discord_user_id, guild_id, created_at, status, answers) VALUES (?, ?, ?, ?, 'PENDING', ?)",
@@ -754,17 +771,30 @@ class ApplicationsCog(commands.Cog):
             await execute("UPDATE applications SET temp_role_given=0 WHERE id=?", (app_id,))
 
         if accepted:
-            role_ids = parse_id_list(await get_setting(SET_ACCEPT_ROLES_KEY))
+            accept_raw = await get_setting(SET_ACCEPT_ROLES_KEY, str(guild.id)) or await get_setting(SET_ACCEPT_ROLES_KEY)
+            role_ids = parse_id_list(accept_raw)
             roles = [guild.get_role(rid) for rid in role_ids]
             roles = [r for r in roles if r is not None]
             if roles:
-                await member.add_roles(*roles, reason=f"Заявка {app_id} принята")
+                try:
+                    await member.add_roles(*roles, reason=f"Заявка {app_id} принята")
+                except discord.Forbidden:
+                    try:
+                        from services.role_sync import bot_log
+                        await bot_log(self.bot, str(guild.id),
+                                      f"Нет прав выдать роли заявки {member} ({member.id}). Проверь иерархию ролей и Manage Roles.")
+                    except Exception:
+                        pass
         else:
-            remove_ids = parse_id_list(await get_setting(SET_REJECT_ROLES_KEY))
+            reject_raw = await get_setting(SET_REJECT_ROLES_KEY, str(guild.id)) or await get_setting(SET_REJECT_ROLES_KEY)
+            remove_ids = parse_id_list(reject_raw)
             roles = [guild.get_role(rid) for rid in remove_ids]
             roles = [r for r in roles if r is not None and r in member.roles]
             if roles:
-                await member.remove_roles(*roles, reason=f"Заявка {app_id} отклонена")
+                try:
+                    await member.remove_roles(*roles, reason=f"Заявка {app_id} отклонена")
+                except discord.Forbidden:
+                    pass
 
         await self.refresh_message(
             app_id,
