@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { guildsApi } from '@/lib/api';
+import { guildsApi, asArray } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { Bell, Save, CheckCircle, AlertTriangle } from 'lucide-react';
 
@@ -78,8 +78,8 @@ export default function NotificationsPage() {
     onError: (e: any) => setMsg({ ok: false, text: e.response?.data?.error || 'Ошибка' }),
   });
 
-  const channels: any[] = channelsData?.channels || [];
-  const roles: DiscordRole[] = rolesData?.roles || [];
+  const channels: any[] = asArray(channelsData?.channels);
+  const roles: DiscordRole[] = asArray(rolesData?.roles);
   const toggle = (id: string) =>
     setPingIds(pingIds.includes(id) ? pingIds.filter((x) => x !== id) : [...pingIds, id]);
 

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { applicationsApi, guildsApi } from '@/lib/api';
+import { applicationsApi, guildsApi, asArray } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { ClipboardList, Plus, Trash2, Save } from 'lucide-react';
 import { DEFAULT_QUESTIONS, type Question } from '@/components/ApplicationForm';
@@ -55,7 +55,7 @@ export default function ApplicationsPage() {
     },
   });
 
-  const apps: any[] = data?.applications || [];
+  const apps: any[] = asArray(data?.applications);
 
   return (
     <div className="space-y-6">

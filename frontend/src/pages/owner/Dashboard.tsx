@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { guildsApi } from '@/lib/api';
+import { guildsApi, asArray } from '@/lib/api';
 import { Server, Users, FileText, Clock } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -23,10 +23,11 @@ export default function OwnerDashboard() {
     );
   }
 
-  const totalGuilds = guilds?.length || 0;
-  const totalUsers = guilds?.reduce((sum: number, g: any) => sum + g.total_users, 0) || 0;
-  const totalContracts = guilds?.reduce((sum: number, g: any) => sum + g.total_contracts, 0) || 0;
-  const pendingContracts = guilds?.reduce((sum: number, g: any) => sum + g.pending_contracts, 0) || 0;
+  const guildsList: any[] = asArray(guilds);
+  const totalGuilds = guildsList.length || 0;
+  const totalUsers = guildsList.reduce((sum: number, g: any) => sum + g.total_users, 0) || 0;
+  const totalContracts = guildsList.reduce((sum: number, g: any) => sum + g.total_contracts, 0) || 0;
+  const pendingContracts = guildsList.reduce((sum: number, g: any) => sum + g.pending_contracts, 0) || 0;
 
   return (
     <div className="space-y-6">
@@ -100,7 +101,7 @@ export default function OwnerDashboard() {
           </Link>
         </div>
 
-        {guilds?.length === 0 ? (
+        {guildsList.length === 0 ? (
           <div className="text-center py-12">
             <Server className="mx-auto h-12 w-12 text-gray-400" />
             <p className="mt-4 text-gray-600 dark:text-gray-400">
@@ -112,7 +113,7 @@ export default function OwnerDashboard() {
           </div>
         ) : (
           <div className="space-y-3">
-            {guilds?.map((guild: any) => (
+            {guildsList?.map((guild: any) => (
               <Link
                 key={guild.guild_id}
                 to={`/guilds/${guild.guild_id}/roles`}

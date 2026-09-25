@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ranksApi, guildsApi } from '@/lib/api';
+import { ranksApi, guildsApi, asArray } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { TrendingUp, Plus, Trash2, Save, CheckCircle, AlertTriangle } from 'lucide-react';
 
@@ -31,8 +31,8 @@ export default function RanksPage() {
     enabled: !!guildId && canEdit,
   });
 
-  const ranks: any[] = data?.ranks || [];
-  const roles: any[] = rolesData?.roles || [];
+  const ranks: any[] = asArray(data?.ranks);
+  const roles: any[] = asArray(rolesData?.roles);
   const [reqDraft, setReqDraft] = useState<any | null>(null);
   const reqs = reqDraft ?? reqData ?? { main: [], alt: [] };
 

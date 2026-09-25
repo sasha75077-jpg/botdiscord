@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { guildsApi } from '@/lib/api';
+import { guildsApi, asArray } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { Trophy, Search } from 'lucide-react';
 
@@ -28,7 +28,7 @@ export default function LeaderboardPage() {
     enabled: !!guildId,
   });
 
-  const members: any[] = data?.members || [];
+  const members: any[] = asArray(data?.members);
   const query = q.trim().toLowerCase();
   const shown = members.filter((m: any) =>
     !query || (m.username || '').toLowerCase().includes(query)

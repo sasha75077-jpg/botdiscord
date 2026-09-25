@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { panelsApi, guildsApi } from '@/lib/api';
+import { panelsApi, guildsApi, asArray } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { LayoutDashboard, Send, CheckCircle, AlertTriangle, Clock } from 'lucide-react';
 
@@ -39,7 +39,7 @@ export default function PanelsPage() {
   });
 
   const channels: any[] = channelsData?.channels || [];
-  const items: any[] = tasks?.tasks || [];
+  const items: any[] = asArray(tasks?.tasks);
 
   const card = (
     title: string,

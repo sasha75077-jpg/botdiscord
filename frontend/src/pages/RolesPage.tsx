@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { guildsApi, permissionsApi } from '@/lib/api';
+import { guildsApi, permissionsApi, asArray } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { Shield, Users, AlertTriangle, CheckCircle } from 'lucide-react';
 
@@ -23,9 +23,10 @@ function RoleChecklist({
   onToggle: (id: string) => void;
   disabled?: boolean;
 }) {
+  const list = asArray(roles);
   return (
     <div className="max-h-64 overflow-y-auto border border-gray-200 dark:border-dark-600 rounded-lg divide-y divide-gray-100 dark:divide-dark-700">
-      {roles.map((r) => (
+      {list.map((r) => (
         <label
           key={r.id}
           className={`flex items-center gap-3 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-dark-700 ${
@@ -47,7 +48,7 @@ function RoleChecklist({
           <span className="text-xs text-gray-400">{r.id}</span>
         </label>
       ))}
-      {roles.length === 0 && (
+      {list.length === 0 && (
         <p className="px-3 py-4 text-sm text-gray-500">Нет ролей</p>
       )}
     </div>
@@ -154,8 +155,8 @@ export default function RolesPage() {
     return <p className="text-gray-500">Выбери сервер в шапке.</p>;
   }
 
-  const perms: any[] = permissions?.permissions || [];
-  const logItems: any[] = logs?.logs || [];
+  const perms: any[] = asArray(permissions?.permissions);
+  const logItems: any[] = asArray(logs?.logs);
   const grantRoles = isOwner ? ['admin', 'recruiter', 'user'] : ['recruiter', 'user'];
 
   return (
@@ -187,7 +188,7 @@ export default function RolesPage() {
           <h2 className="text-xl font-bold mb-1">Admin {isOwner ? '' : '(только овнер)'}</h2>
           <p className="text-sm text-gray-500 mb-3">Участники с этими ролями получают полный доступ.</p>
           <RoleChecklist
-            roles={discordRoles || []}
+            roles={asArray(discordRoles)}
             selected={adminIds}
             onToggle={(id) => toggle(adminIds, setAdminIds, id)}
             disabled={!isOwner}
@@ -197,7 +198,7 @@ export default function RolesPage() {
           <h2 className="text-xl font-bold mb-1">Recruiter</h2>
           <p className="text-sm text-gray-500 mb-3">Агитации и заявки (чтение).</p>
           <RoleChecklist
-            roles={discordRoles || []}
+            roles={asArray(discordRoles)}
             selected={recruitIds}
             onToggle={(id) => toggle(recruitIds, setRecruitIds, id)}
           />
@@ -210,7 +211,7 @@ export default function RolesPage() {
             У кого эти роли — уже в семье, заявку подать не сможет (ни с сайта, ни из Discord).
           </p>
           <RoleChecklist
-            roles={discordRoles || []}
+            roles={asArray(discordRoles)}
             selected={familyIds}
             onToggle={(id) => toggle(familyIds, setFamilyIds, id)}
           />
@@ -223,7 +224,7 @@ export default function RolesPage() {
             С этими ролями заявку подать нельзя. Ничего не выдается — просто блок.
           </p>
           <RoleChecklist
-            roles={discordRoles || []}
+            roles={asArray(discordRoles)}
             selected={firstRankIds}
             onToggle={(id) => toggle(firstRankIds, setFirstRankIds, id)}
           />

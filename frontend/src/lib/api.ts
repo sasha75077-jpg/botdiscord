@@ -2,6 +2,9 @@ import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
+// Безопасный массив для рендера списков: API иногда отдает не-массив
+export const asArray = (v: any): any[] => (Array.isArray(v) ? v : []);
+
 export const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {

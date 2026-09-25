@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { bonusApi } from '@/lib/api';
-import { contractsApi } from '@/lib/api';
+import { bonusApi, contractsApi, asArray } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { Award, Send, Download, CheckCircle, XCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -185,7 +184,8 @@ export default function BonusPage() {
           {reports.map((r: any) => {
             let contracts: any[] = [];
             try {
-              contracts = JSON.parse(r.contracts_json || '[]');
+              const parsed = JSON.parse(r.contracts_json || '[]');
+              contracts = asArray(parsed);
             } catch { /* ignore */ }
             const locked = weekLocked(r.week_end);
             return (

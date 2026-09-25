@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { guildsApi } from '@/lib/api';
+import { guildsApi, asArray } from '@/lib/api';
 import {
   Settings,
   Activity,
@@ -36,12 +36,13 @@ export default function OwnerSettingsPage() {
     );
   }
 
-  const totalGuilds = guilds?.length || 0;
-  const totalUsers = guilds?.reduce((sum: number, g: any) => sum + (g.total_users || 0), 0) || 0;
-  const totalContracts = guilds?.reduce((sum: number, g: any) => sum + (g.total_contracts || 0), 0) || 0;
-  const pendingContracts = guilds?.reduce((sum: number, g: any) => sum + (g.pending_contracts || 0), 0) || 0;
+  const guildsList: any[] = asArray(guilds);
+  const totalGuilds = guildsList.length || 0;
+  const totalUsers = guildsList.reduce((sum: number, g: any) => sum + (g.total_users || 0), 0) || 0;
+  const totalContracts = guildsList.reduce((sum: number, g: any) => sum + (g.total_contracts || 0), 0) || 0;
+  const pendingContracts = guildsList.reduce((sum: number, g: any) => sum + (g.pending_contracts || 0), 0) || 0;
 
-  const activeGuilds = guilds?.filter((g: any) => g.is_active).length || 0;
+  const activeGuilds = guildsList.filter((g: any) => g.is_active).length || 0;
   const inactiveGuilds = totalGuilds - activeGuilds;
 
   return (
@@ -189,7 +190,7 @@ export default function OwnerSettingsPage() {
         </div>
 
         <div className="space-y-3">
-          {guilds?.slice(0, 5).map((guild: any) => (
+          {guildsList?.slice(0, 5).map((guild: any) => (
             <div
               key={guild.guild_id}
               className="flex items-center justify-between p-4 bg-gray-50 dark:bg-dark-700 rounded-lg"

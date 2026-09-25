@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { applicationsApi, guildsApi } from '@/lib/api';
+import { applicationsApi, guildsApi, asArray } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { ArrowLeft, CheckCircle, XCircle, Hand, Send } from 'lucide-react';
 import { DEFAULT_QUESTIONS, type Question } from '@/components/ApplicationForm';
@@ -100,7 +100,7 @@ export default function ApplicationDetailPage() {
 
   const canWrite =
     app.claimed_by === user?.discord_id || isAdmin;
-  const messages: any[] = chat?.messages || [];
+  const messages: any[] = asArray(chat?.messages);
 
   return (
     <div className="space-y-6">

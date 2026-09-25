@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { showcaseApi } from '@/lib/api';
+import { showcaseApi, asArray } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { Server, Users, ExternalLink, LogOut } from 'lucide-react';
 
@@ -11,7 +11,7 @@ export default function ShowcasePage() {
     queryFn: async () => (await showcaseApi.list()).data,
   });
 
-  const servers: any[] = data?.servers || [];
+  const servers: any[] = asArray(data?.servers);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-500 to-primary-700 dark:from-dark-900 dark:to-dark-800 px-4 py-10">

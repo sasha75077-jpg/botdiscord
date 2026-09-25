@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { guildsApi } from '@/lib/api';
+import { guildsApi, asArray } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { Users, Search } from 'lucide-react';
 
@@ -19,7 +19,7 @@ export default function UsersPage() {
     enabled: !!guildId,
   });
 
-  const members: any[] = data?.members || [];
+  const members: any[] = asArray(data?.members);
   const query = q.trim().toLowerCase();
   const shown = members
     .filter((m: any) =>

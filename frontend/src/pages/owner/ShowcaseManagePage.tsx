@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { showcaseApi, guildsApi } from '@/lib/api';
+import { showcaseApi, guildsApi, asArray } from '@/lib/api';
 import { Server, Plus, Trash2, Save, Eye, EyeOff } from 'lucide-react';
 
 export default function ShowcaseManagePage() {
@@ -48,8 +48,8 @@ export default function ShowcaseManagePage() {
     onSuccess: invalidate,
   });
 
-  const servers: any[] = data?.servers || [];
-  const guildList: any[] = Array.isArray(guilds) ? guilds : [];
+  const servers: any[] = asArray(data?.servers);
+  const guildList: any[] = asArray(guilds);
 
   return (
     <div className="space-y-6">
