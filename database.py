@@ -151,6 +151,23 @@ async def migrate_db():
             except Exception:
                 pass  # колонка уже есть
 
+        # v_contract_value: только на новых таблицах (иначе премии не видят новые контракты)
+        try:
+            async with db.execute("SELECT sql FROM sqlite_master WHERE name='v_contract_value'") as cursor:
+                vrow = await cursor.fetchone()
+            vsql = (vrow[0] if vrow and vrow[0] else "") if vrow else ""
+            if not vrow or '"contracts_old"' in vsql or "'курьер-еды'" not in vsql:
+                import os as _os
+                _base = os.path.dirname(os.path.abspath(__file__))
+                _vf = os.path.join(_base, "models", "v_contract_value.sql")
+                with open(_vf, "r", encoding="utf-8") as _f:
+                    _vsql = _f.read()
+                await db.execute("DROP VIEW IF EXISTS v_contract_value")
+                await db.executescript(_vsql)
+                print("✅ v_contract_value: пересоздана на новых таблицах")
+        except Exception as e:
+            print(f"⚠️  v_contract_value migrate: {e}")
+
         await db.commit()
     finally:
         await db.close()

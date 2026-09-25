@@ -174,7 +174,7 @@ export default function BonusPage() {
               <div key={r.id} className="card">
                 <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
                   <p className="font-semibold">
-                    #{r.id} • {r.person?.username || r.discord_id || r.recipient_discord_id}
+                    💰 Премия #{r.id} • {r.person?.username || r.discord_id || r.recipient_discord_id}
                   </p>
                   <span className="px-3 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-dark-700">
                     {r.status} • {r.week_start}..{r.week_end} • {r.amount}
