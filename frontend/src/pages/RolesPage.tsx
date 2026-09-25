@@ -65,6 +65,7 @@ export default function RolesPage() {
   const [recruitIds, setRecruitIds] = useState<string[]>([]);
   const [familyIds, setFamilyIds] = useState<string[]>([]);
   const [firstRankIds, setFirstRankIds] = useState<string[]>([]);
+  const [callRole, setCallRole] = useState('');
   const [newDiscordId, setNewDiscordId] = useState('');
   const [newRole, setNewRole] = useState('recruiter');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -101,6 +102,7 @@ export default function RolesPage() {
     setRecruitIds(split(s.panel_recruiter_role_ids));
     setFamilyIds(split(s.family_member_role_ids));
     setFirstRankIds(split(s.first_rank_role_ids));
+    setCallRole(String(s.applications_temp_role_id || ''));
   }, [settings]);
 
   const toggle = (list: string[], setList: (v: string[]) => void, id: string) =>
@@ -114,6 +116,7 @@ export default function RolesPage() {
       }
       payload.family_member_role_ids = familyIds.join(',');
       payload.first_rank_role_ids = firstRankIds.join(',');
+      payload.applications_temp_role_id = callRole;
       payload.panel_recruiter_role_ids = recruitIds.join(',');
       await guildsApi.updateSettings(guildId!, payload);
     },
@@ -215,15 +218,33 @@ export default function RolesPage() {
       ) : null}
       {isOwner || user?.role === 'admin' ? (
         <div className="card">
-          <h2 className="text-xl font-bold mb-1">Первый ранг (выдается при принятии)</h2>
+          <h2 className="text-xl font-bold mb-1">Первый ранг (уже в семье)</h2>
           <p className="text-sm text-gray-500 mb-3">
-            С этими ролями заявку тоже подать нельзя — человек уже в семье.
+            С этими ролями заявку подать нельзя. Ничего не выдается — просто блок.
           </p>
           <RoleChecklist
             roles={discordRoles || []}
             selected={firstRankIds}
             onToggle={(id) => toggle(firstRankIds, setFirstRankIds, id)}
           />
+        </div>
+      ) : null}
+      {isOwner || user?.role === 'admin' ? (
+        <div className="card">
+          <h2 className="text-xl font-bold mb-1">Обзвон (роль при взятии)</h2>
+          <p className="text-sm text-gray-500 mb-3">
+            Выдается кандидату, когда рекрутер берет заявку на рассмотрение. Снимается при решении.
+          </p>
+          <select
+            value={callRole}
+            onChange={(e) => setCallRole(e.target.value)}
+            className="input w-full max-w-md"
+          >
+            <option value="">— не выбрана —</option>
+            {(discordRoles || []).map((r) => (
+              <option key={r.id} value={r.id}>{r.name}</option>
+            ))}
+          </select>
         </div>
       ) : null}
       <button onClick={() => saveBindings.mutate()} disabled={saveBindings.isPending} className="btn btn-primary">

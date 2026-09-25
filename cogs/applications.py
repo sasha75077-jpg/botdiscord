@@ -775,8 +775,7 @@ class ApplicationsCog(commands.Cog):
 
         if accepted:
             accept_raw = await get_setting(SET_ACCEPT_ROLES_KEY, str(guild.id)) or await get_setting(SET_ACCEPT_ROLES_KEY)
-            first_raw = await get_setting("first_rank_role_ids", str(guild.id))
-            role_ids = parse_id_list(accept_raw) + [x for x in parse_id_list(first_raw) if x not in parse_id_list(accept_raw)]
+            role_ids = parse_id_list(accept_raw)
             roles = [guild.get_role(rid) for rid in role_ids]
             roles = [r for r in roles if r is not None]
             if roles:
@@ -1020,13 +1019,6 @@ class ApplicationsCog(commands.Cog):
             if accepted:
                 role_ids = parse_id_list(await get_setting(SET_ACCEPT_ROLES_KEY, str(guild.id))
                                          or await get_setting(SET_ACCEPT_ROLES_KEY))
-                try:
-                    first_raw = await get_setting("first_rank_role_ids", str(guild.id)) or ""
-                    for _fr in parse_id_list(first_raw):
-                        if _fr not in role_ids:
-                            role_ids.append(_fr)
-                except Exception:
-                    pass
                 roles = [guild.get_role(rid) for rid in role_ids]
                 roles = [r for r in roles if r is not None]
                 if roles:
