@@ -539,7 +539,7 @@ class BonusPreviewPagerView(discord.ui.View):
             return False
         return True
 
-    async def _refresh(self, interaction: discord.Interaction):
+    async def _refresh_view(self, interaction: discord.Interaction):
         embed = await build_bonus_preview_embed(
             self.uid, self.report_id, self.week_start, self.week_end, self.page, self.per_page
         )
@@ -548,7 +548,7 @@ class BonusPreviewPagerView(discord.ui.View):
     @discord.ui.button(label="◀", style=discord.ButtonStyle.secondary, custom_id="bonus_prev_page")
     async def prev_page(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.page = max(0, self.page - 1)
-        await self._refresh(interaction)
+        await self._refresh_view(interaction)
 
     @discord.ui.button(label="▶", style=discord.ButtonStyle.secondary, custom_id="bonus_next_page")
     async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -557,7 +557,7 @@ class BonusPreviewPagerView(discord.ui.View):
         _, total_cnt = await fetch_week_contracts_page(self.uid, self.week_start, self.week_end, 0, 1)
         max_page = max(0, (total_cnt - 1) // self.per_page) if total_cnt else 0
         self.page = min(self.page, max_page)
-        await self._refresh(interaction)
+        await self._refresh_view(interaction)
 
     @discord.ui.button(label="✅ Отправить", style=discord.ButtonStyle.success, custom_id="bonus_pager_send_review")
     async def send_btn(self, interaction: discord.Interaction, button: discord.ui.Button):

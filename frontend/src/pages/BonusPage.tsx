@@ -44,7 +44,13 @@ export default function BonusPage() {
   const decide = useMutation({
     mutationFn: ({ id, accepted }: { id: number; accepted: boolean }) =>
       accepted ? bonusApi.approve(guildId, id) : bonusApi.reject(guildId, id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['bonus', guildId] }),
+    onSuccess: (res: any) => {
+      const calc = res?.data?.calc;
+      setMsg(calc
+        ? `✅ Принято: контракты ${calc.contracts}, ранг +${calc.rank}, тюнинг +${calc.tuning}, итого ${calc.total}`
+        : '');
+      queryClient.invalidateQueries({ queryKey: ['bonus', guildId] });
+    },
     onError: (e: any) => setMsg(e.response?.data?.error || 'Ошибка решения'),
   });
   const { data: myContracts } = useQuery({
