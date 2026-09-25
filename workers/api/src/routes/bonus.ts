@@ -53,10 +53,20 @@ function currentWeek(): { week_start: string; week_end: string } {
   return { week_start: mon.toISOString().slice(0, 10), week_end: sun.toISOString().slice(0, 10) }
 }
 
+// Дата контракта: поддерживает ISO (YYYY-MM-DD...) и русский формат (DD.MM.YYYY...)
+function contractDay(createdAt: string): string {
+  const s = (createdAt || '').trim()
+  let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s)
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`
+  m = /^(\d{2})\.(\d{2})\.(\d{4})/.exec(s)
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`
+  return ''
+}
+
 // Расчет как в боте (v_contract_value): база + надбавки за ранг
 async function calcBonus(
   env: Env, guildId: string, discordId: string, weekStart: string, weekEnd: string
-): Promise<{ contracts: number; rank: number; tuning: number; total: number }> {
+): Promise<{ contracts: number; rank: number; tuning: number; total: number; count: number; byType: Record<string, number> }> {
   const prices = await env.DB.prepare('SELECT item_key, price FROM prices').all()
   const pmap: Record<string, number> = {}
   for (const p of prices.results as Array<{ item_key: string; price: number }>) {
@@ -85,15 +95,19 @@ async function calcBonus(
   } catch { /* ignore */ }
 
   const rows = await env.DB.prepare(
-    `SELECT contract_type, price, details FROM contracts
-     WHERE guild_id = ? AND discord_id = ? AND status = 'approved'
-     AND date(created_at) >= date(?) AND date(created_at) <= date(?)`
-  ).bind(guildId, discordId, weekStart, weekEnd).all()
+    `SELECT contract_type, price, details, created_at FROM contracts
+     WHERE guild_id = ? AND discord_id = ? AND status = 'approved'`
+  ).bind(guildId, discordId).all()
 
   let contracts = 0
   let rank = 0
   let tuning = 0
+  let count = 0
+  const byType: Record<string, number> = {}
   for (const c of rows.results as any[]) {
+    const day = contractDay(String(c.created_at || ''))
+    if (!day || day < weekStart || day > weekEnd) continue
+    count++
     const ct = c.contract_type as string
     let det: any = {}
     try {
@@ -122,10 +136,11 @@ async function calcBonus(
     else if (ct === 'тюнинг') base = pmap['tuning:with_screenshot'] || 0
     else if (ct === 'курьер-еды') base = pmap['courier:delivery'] || 0
     contracts += base
+    byType[ct] = (byType[ct] || 0) + 1
     if (ct === 'товары' || ct === 'металлургия-сдача') rank += rankSort * 1000
     if (ct === 'тюнинг' || ct === 'курьер-еды') tuning += rankSort * 100
   }
-  return { contracts, rank, tuning, total: contracts + rank + tuning }
+  return { contracts, rank, tuning, total: contracts + rank + tuning, count, byType }
 }
 
 // GET /guilds/:guildId/bonus?status=&discord_id=&since= - свои или все (staff)
@@ -143,10 +158,10 @@ bonus.get('/:guildId/bonus', async (c) => {
 
   if (!isStaff(who.role)) {
     if (!who.discord_id) return c.json({ error: 'Forbidden' }, 403)
-    query += ' AND discord_id = ?'
+    query += ' AND recipient_discord_id = ?'
     params.push(who.discord_id)
   } else if (filterDid) {
-    query += ' AND discord_id = ?'
+    query += ' AND recipient_discord_id = ?'
     params.push(filterDid)
   }
   if (status) {
@@ -185,27 +200,44 @@ bonus.post('/:guildId/bonus', async (c) => {
   }
 
   const dup = await c.env.DB.prepare(
-    `SELECT id FROM bonus_reports WHERE guild_id = ? AND discord_id = ?
+    `SELECT id FROM bonus_reports WHERE guild_id = ? AND recipient_discord_id = ?
      AND week_start = ? AND week_end = ? AND status IN ('pending','approved') LIMIT 1`
   ).bind(guildId, who.discord_id, week_start, week_end).first()
   if (dup) return c.json({ error: 'Премия за эту неделю уже подана' }, 409)
 
-  // Какие контракты войдут: approved за неделю
-  const contracts = await c.env.DB.prepare(
+  // Какие контракты войдут: approved за неделю (даты: ISO и DD.MM.YYYY)
+  const allApproved = await c.env.DB.prepare(
     `SELECT id, contract_type, price, created_at FROM contracts
-     WHERE guild_id = ? AND discord_id = ? AND status = 'approved'
-     AND date(created_at) >= date(?) AND date(created_at) <= date(?)`
-  ).bind(guildId, who.discord_id, week_start, week_end).all()
+     WHERE guild_id = ? AND discord_id = ? AND status = 'approved'`
+  ).bind(guildId, who.discord_id).all()
+  const inWeek = (allApproved.results as any[]).filter((r) => {
+    const day = contractDay(String(r.created_at || ''))
+    return day && day >= (week_start as string) && day <= (week_end as string)
+  })
 
   const res = await c.env.DB.prepare(
     `INSERT INTO bonus_reports (guild_id, reporter_discord_id, recipient_discord_id,
-      recipient_nickname, bonus_type, amount, reason, status, contracts_json)
-     VALUES (?, ?, ?, ?, 'weekly', 0, ?, 'pending', ?)`
+      recipient_nickname, bonus_type, amount, reason, status, contracts_json, week_start, week_end)
+     VALUES (?, ?, ?, ?, 'weekly', 0, ?, 'pending', ?, ?, ?)`
   ).bind(guildId, who.discord_id, who.discord_id, who.discord_id,
-    `${week_start}..${week_end}`, JSON.stringify(contracts.results)).run()
+    `${week_start}..${week_end}`, JSON.stringify(inWeek), week_start, week_end).run()
   const row = await c.env.DB.prepare('SELECT * FROM bonus_reports WHERE id = ?')
     .bind(res.meta.last_row_id).first()
-  return c.json(row)
+  // Сразу считаем разбивку как при принятии, чтобы сайт показывал суммы
+  const preview = await calcBonus(c.env, guildId, who.discord_id, week_start, week_end)
+  return c.json({ ...row as object, calc: preview })
+})
+
+// GET /guilds/:guildId/bonus/preview - разбивка моей премии за текущую неделю
+bonus.get('/:guildId/bonus/preview', async (c) => {
+  const guildId = c.req.param('guildId')
+  const who = await caller(c, c.env)
+  if (!who) return c.json({ error: 'Сессия истекла, войди заново' }, 401)
+  if (!who.discord_id) return c.json({ error: 'Forbidden' }, 403)
+  if (!sameGuild(who, guildId)) return c.json({ error: 'Forbidden' }, 403)
+  const cur = currentWeek()
+  const calc = await calcBonus(c.env, guildId, who.discord_id, cur.week_start, cur.week_end)
+  return c.json({ ...cur, ...calc })
 })
 
 // PUT /guilds/:guildId/bonus/:id/approve - принять (admin/owner, только открытая неделя)

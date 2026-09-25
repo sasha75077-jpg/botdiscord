@@ -261,6 +261,141 @@ guilds.get('/:guildId/dashboard', async (c) => {
     'SELECT id, contract_type, price, status, created_at FROM contracts WHERE guild_id = ? AND discord_id = ? ORDER BY created_at DESC LIMIT 5'
   ).bind(guildId, discordId).all()
 
+  // Стата по команде: контракты + премия текущей недели с разбивкой (только стаффу)
+  const staff: any[] = []
+  const callerRole = payload.role as string | undefined
+  if (payload.user_type === 'owner' || callerRole === 'admin') {
+    try {
+      const prow = await c.env.DB.prepare(
+        "SELECT discord_id, role FROM permissions WHERE guild_id = ? AND role IN ('admin','recruiter')"
+      ).bind(guildId).all()
+      const now = new Date()
+      const day = (now.getUTCDay() + 6) % 7
+      const mon = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - day))
+      const sun = new Date(mon.getTime() + 6 * 86400000)
+      const ws = mon.toISOString().slice(0, 10)
+      const we = sun.toISOString().slice(0, 10)
+      const prices = await c.env.DB.prepare('SELECT item_key, price FROM prices').all()
+      const pmap: Record<string, number> = {}
+      for (const pr of prices.results as Array<{ item_key: string; price: number }>) {
+        pmap[pr.item_key] = Number(pr.price || 0)
+      }
+      const ranks = await c.env.DB.prepare(
+        'SELECT role_id, sort_order FROM ranks WHERE guild_id = ?'
+      ).bind(guildId).all()
+      for (const p of prow.results as Array<{ discord_id: string; role: string }>) {
+        const cc = await c.env.DB.prepare(
+          `SELECT status, COUNT(*) as c FROM contracts WHERE guild_id = ? AND discord_id = ? GROUP BY status`
+        ).bind(guildId, p.discord_id).all()
+        const counts = { total: 0, approved: 0, pending: 0, rejected: 0 } as Record<string, number>
+        for (const r of cc.results as Array<{ status: string; c: number }>) {
+          counts.total += r.c
+          if (r.status in counts) counts[r.status] = r.c
+        }
+        // Контракты недели по типам (ISO + DD.MM.YYYY)
+        const wc = await c.env.DB.prepare(
+          `SELECT contract_type, price, details, created_at FROM contracts
+           WHERE guild_id = ? AND discord_id = ? AND status = 'approved'`
+        ).bind(guildId, p.discord_id).all()
+        const byType: Record<string, number> = {}
+        let weekContracts = 0
+        let weekRank = 0
+        let weekTuning = 0
+        let weekCount = 0
+        let rankSort = 0
+        try {
+          if (c.env.DISCORD_BOT_TOKEN) {
+            const mresp = await fetch(
+              `${c.env.DISCORD_API_ENDPOINT}/guilds/${guildId}/members/${p.discord_id}`,
+              { headers: { Authorization: `Bot ${c.env.DISCORD_BOT_TOKEN}` } }
+            )
+            if (mresp.ok) {
+              const member = await mresp.json<{ roles: string[] }>()
+              for (const r of ranks.results as Array<{ role_id: string; sort_order: number }>) {
+                if (r.role_id && (member.roles || []).includes(r.role_id)) {
+                  rankSort = Math.max(rankSort, r.sort_order || 0)
+                }
+              }
+            }
+          }
+        } catch { /* ignore */ }
+        for (const w of wc.results as any[]) {
+          const s = String(w.created_at || '')
+          let d = ''
+          let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s)
+          if (m) d = `${m[1]}-${m[2]}-${m[3]}`
+          else {
+            m = /^(\d{2})\.(\d{2})\.(\d{4})/.exec(s)
+            if (m) d = `${m[3]}-${m[2]}-${m[1]}`
+          }
+          if (!d || d < ws || d > we) continue
+          weekCount++
+          const ct = w.contract_type as string
+          byType[ct] = (byType[ct] || 0) + 1
+          let det: any = {}
+          try { det = JSON.parse(w.details || '{}') } catch { /* ignore */ }
+          const num = (v: any) => Number(v) || 0
+          let base = 0
+          if (ct === 'активация') base = num(w.price)
+          else if (ct === 'ателье') base = num(det.totalUniforms) * (pmap['atelier.uniform'] || 0)
+          else if (ct === 'металлургия-сдача') {
+            const oreMap: Record<string, string> = {
+              'Железная руда': 'ore.delivery.iron', 'Серебряная руда': 'ore.delivery.silver',
+              'Медная руда': 'ore.delivery.copper', 'Оловянная руда': 'ore.delivery.tin',
+              'Золотая руда': 'ore.delivery.gold',
+            }
+            base = pmap[oreMap[det.oreType] || ''] || 0
+          } else if (ct === 'металлургия-добыча') {
+            base = num(det.iron) * (pmap['ore_unit:iron'] || 0)
+              + num(det.silver) * (pmap['ore_unit:silver'] || 0)
+              + num(det.copper) * (pmap['ore_unit:copper'] || 0)
+              + num(det.tin) * (pmap['ore_unit:tin'] || 0)
+              + num(det.gold) * (pmap['ore_unit:gold'] || 0)
+          } else if (ct === 'агитации-маркетплейс') base = (det.links || []).length * (pmap['agit:marketplace_link'] || 0)
+          else if (ct === 'тюнинг') base = pmap['tuning:with_screenshot'] || 0
+          else if (ct === 'курьер-еды') base = pmap['courier:delivery'] || 0
+          weekContracts += base
+          if (ct === 'товары' || ct === 'металлургия-сдача') weekRank += rankSort * 1000
+          if (ct === 'тюнинг' || ct === 'курьер-еды') weekTuning += rankSort * 100
+        }
+        const bw = await c.env.DB.prepare(
+          `SELECT COALESCE(SUM(amount), 0) as s FROM bonus_reports
+           WHERE guild_id = ? AND recipient_discord_id = ? AND status = 'approved'
+           AND week_start = ? AND week_end = ?`
+        ).bind(guildId, p.discord_id, ws, we).first<{ s: number }>()
+        let username: string | null = null
+        try {
+          if (c.env.DISCORD_BOT_TOKEN) {
+            const ur = await fetch(`${c.env.DISCORD_API_ENDPOINT}/users/${p.discord_id}`, {
+              headers: { Authorization: `Bot ${c.env.DISCORD_BOT_TOKEN}` },
+            })
+            if (ur.ok) {
+              const uj = await ur.json<{ username: string }>()
+              username = uj.username
+            }
+          }
+        } catch { /* ignore */ }
+        staff.push({
+          discord_id: p.discord_id,
+          username,
+          role: p.role,
+          contracts: counts,
+          bonus_week: bw?.s || 0,
+          week: {
+            week_start: ws,
+            week_end: we,
+            count: weekCount,
+            by_type: byType,
+            contracts: weekContracts,
+            rank: weekRank,
+            tuning: weekTuning,
+            total: weekContracts + weekRank + weekTuning,
+          },
+        })
+      }
+    } catch { /* ignore */ }
+  }
+
   // Ранг по Discord-ролям
   let myRank: string | null = null
   let myRankId: number | null = null
@@ -335,6 +470,7 @@ guilds.get('/:guildId/dashboard', async (c) => {
     my_recent: recent.results,
     my_rank: myRank,
     progress,
+    staff,
   })
 })
 

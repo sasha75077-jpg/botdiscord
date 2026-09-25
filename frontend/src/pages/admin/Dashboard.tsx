@@ -402,6 +402,51 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Команда: контракты и премия недели */}
+      {Array.isArray((live as any)?.staff) && (live as any).staff.length > 0 && (
+        <div className="card">
+          <h2 className="text-xl font-bold mb-1">Команда: неделя {(live as any).staff[0]?.week?.week_start}..{(live as any).staff[0]?.week?.week_end}</h2>
+          <p className="text-sm text-gray-500 mb-3">
+            По каждому админу/рекруту: всего контрактов, за неделю по типам, база + надбавки, принятая премия.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-500">
+                  <th className="py-2 pr-3">Кто</th>
+                  <th className="py-2 pr-3">Всего</th>
+                  <th className="py-2 pr-3">За неделю</th>
+                  <th className="py-2 pr-3">База / ранг / тюнинг / итого</th>
+                  <th className="py-2 pr-3">Принято премией</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(live as any).staff.map((s: any) => (
+                  <tr key={s.discord_id} className="border-t border-gray-100 dark:border-dark-700">
+                    <td className="py-2 pr-3">
+                      {s.username || s.discord_id}
+                      <span className="text-gray-500"> • {s.role}</span>
+                      <div className="text-xs text-gray-500">{s.discord_id}</div>
+                    </td>
+                    <td className="py-2 pr-3">
+                      {s.contracts?.total ?? 0} (✔ {s.contracts?.approved ?? 0} • ⏳ {s.contracts?.pending ?? 0} • ✖ {s.contracts?.rejected ?? 0})
+                    </td>
+                    <td className="py-2 pr-3">
+                      {s.week?.count ?? 0}
+                      {s.week?.by_type ? ` (${Object.entries(s.week.by_type).map(([k, v]) => `${k}: ${v}`).join(', ')})` : ''}
+                    </td>
+                    <td className="py-2 pr-3">
+                      {s.week?.contracts ?? 0} / +{s.week?.rank ?? 0} / +{s.week?.tuning ?? 0} / <b>{s.week?.total ?? 0}</b>
+                    </td>
+                    <td className="py-2 pr-3">{s.bonus_week ?? 0}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

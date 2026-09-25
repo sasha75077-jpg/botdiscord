@@ -3593,7 +3593,8 @@ async def approve_contract(interaction: discord.Interaction, contract_id: int):
     log.add_field(name="User", value=f"<@{discord_id}> ({discord_id})", inline=False)
 
     if contract.get("channel_id") and contract.get("discord_message_id"):
-        link = f"https://discord.com/channels/{GUILD_ID}/{contract['channel_id']}/{contract['discord_message_id']}"
+        _lg = str(contract.get("guild_id") or (interaction.guild.id if interaction.guild else ""))
+        link = f"https://discord.com/channels/{_lg}/{contract['channel_id']}/{contract['discord_message_id']}"
         log.add_field(name="Source", value=f"[Открыть]({link})", inline=False)
 
     # было просто: await audit_contracts(...)

@@ -197,6 +197,8 @@ export const showcaseApi = {
 export const bonusApi = {
   list: (guildId: string, params?: any) =>
     api.get(`/guilds/${guildId}/bonus`, { params }),
+  preview: (guildId: string) =>
+    api.get(`/guilds/${guildId}/bonus/preview`),
   submit: (guildId: string, week_start?: string, week_end?: string) =>
     api.post(`/guilds/${guildId}/bonus`, { week_start, week_end }),
   approve: (guildId: string, id: number) =>

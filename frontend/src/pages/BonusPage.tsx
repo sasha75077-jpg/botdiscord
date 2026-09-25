@@ -35,9 +35,13 @@ export default function BonusPage() {
 
   const submit = useMutation({
     mutationFn: () => bonusApi.submit(guildId),
-    onSuccess: () => {
-      setMsg('');
+    onSuccess: (res: any) => {
+      const calc = res?.data?.calc;
+      setMsg(calc
+        ? `✅ Подано: контрактов ${calc.count ?? 0}, база ${calc.contracts}, ранг +${calc.rank}, тюнинг +${calc.tuning}, итого ${calc.total}`
+        : '');
       queryClient.invalidateQueries({ queryKey: ['bonus', guildId] });
+      queryClient.invalidateQueries({ queryKey: ['bonus-preview', guildId] });
     },
     onError: (e: any) => setMsg(e.response?.data?.error || 'Ошибка подачи'),
   });
@@ -59,6 +63,21 @@ export default function BonusPage() {
     enabled: !!guildId && !isStaff,
   });
 
+  const { data: preview } = useQuery({
+    queryKey: ['bonus-preview', guildId],
+    queryFn: async () => (await bonusApi.preview(guildId)).data,
+    enabled: !!guildId,
+  });
+
+  function dayOf(createdAt: string): string {
+    const s = (createdAt || '').trim();
+    let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+    m = /^(\d{2})\.(\d{2})\.(\d{4})/.exec(s);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    return '';
+  }
+
   const weekStart = (() => {
     const now = new Date();
     const day = (now.getUTCDay() + 6) % 7;
@@ -66,7 +85,7 @@ export default function BonusPage() {
     return mon.toISOString().slice(0, 10);
   })();
   const myWeek = ((Array.isArray(myContracts) ? myContracts : []) as any[]).filter(
-    (c: any) => (c.created_at || '').slice(0, 10) >= weekStart
+    (c: any) => dayOf(c.created_at || '') >= weekStart
   );
   const myWeekSum = myWeek.reduce((s: number, c: any) => s + Number(c.price || 0), 0);
 
@@ -119,8 +138,21 @@ export default function BonusPage() {
 
       <p className="text-sm text-gray-500">
         Премия собирается только за текущую неделю. После понедельника 00:00 МСК неделя закрыта:
-        принимать/отклонять нельзя, контракты в выплату не идут. Точную сумму с рангами считает бот при принятии в Discord.
+        принимать/отклонять нельзя, контракты в выплату не идут. Сумма считается как в боте:
+        база контрактов + надбавка за ранг + надбавка за тюнинг.
       </p>
+
+      {preview && (
+        <div className="card bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 border-purple-200 dark:border-purple-800">
+          <p className="text-sm font-medium">
+            Предпросмотр недели {preview.week_start}..{preview.week_end}: контрактов {preview.count ?? 0}
+            {preview.byType ? ` (${Object.entries(preview.byType).map(([k, v]) => `${k}: ${v}`).join(', ')})` : ''}
+          </p>
+          <p className="text-sm mt-1">
+            База {preview.contracts} • ранг +{preview.rank} • тюнинг +{preview.tuning} • итого {preview.total}
+          </p>
+        </div>
+      )}
 
       {!isStaff && reports.length > 0 && (
         <div className="card bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border-green-200 dark:border-green-800">
