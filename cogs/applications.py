@@ -893,10 +893,13 @@ class ApplicationsCog(commands.Cog):
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (nid, app.get("discord_id"), gid, app.get("created_at"), st, sid,
                  app.get("claimed_by"), app.get("decided_by"), app.get("admin_notes"),
-                 app.get("thread_id"), app.get("log_channel_id"), app.get("log_message_id"),
-                 app.get("answers")),
+                 app.get("thread_id"), app.get("log_channel_id") or "",
+                 app.get("log_message_id") or "", app.get("answers")),
             )
             local = await fetch_one("SELECT * FROM applications WHERE id=?", (nid,))
+            if not local:
+                print(f"[ApplicationsCog] mirror failed silently for site #{sid}")
+                return
             if local and st == "PENDING":
                 await self._post_panel_for_mirror(guild, local)
             return
