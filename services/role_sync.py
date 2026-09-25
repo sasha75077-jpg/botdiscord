@@ -380,7 +380,19 @@ async def _post_bonus_panel(bot, guild_id: str, report_id: int, discord_id: str,
         embed = discord.Embed(title=f"💰 Премия #{report_id} (с сайта)", color=0x9B59B6)
         embed.add_field(name="Пользователь", value=f"<@{discord_id}>", inline=True)
         embed.add_field(name="Неделя", value=f"{week_start} — {week_end}", inline=True)
-        embed.add_field(name="Сайт", value=f"https://botdiscord-87a.pages.dev/reports", inline=False)
+        try:
+            from cogs.admin_panel import calc_live_sums
+            sums = await calc_live_sums(discord_id, week_start, week_end)
+            contracts_sum = float(sums.get("contracts_sum") or 0)
+            rank_sum = float(sums.get("rank_bonus_sum") or 0)
+            tuning_sum = float(sums.get("tuning_rank_bonus_sum") or 0)
+            live_total = float(sums.get("live_total") or 0)
+            embed.add_field(name="Контракты", value=str(round(contracts_sum, 2)), inline=True)
+            embed.add_field(name="Надбавка за ранг", value=str(round(rank_sum, 2)), inline=True)
+            embed.add_field(name="Надбавка за тюнинг", value=str(round(tuning_sum, 2)), inline=True)
+            embed.add_field(name="Итого (live)", value=str(round(live_total, 2)), inline=False)
+        except Exception as e:
+            print(f"[bonus-poll] warn sums: {e}")
         await channel.send(embed=embed, view=BonusActionView(report_id))
     except Exception as e:
         print(f"[bonus-poll] warn panel: {e}")

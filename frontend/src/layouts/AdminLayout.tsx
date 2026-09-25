@@ -32,7 +32,7 @@ export default function AdminLayout({ children }: Props) {
   const navigation = [
     { name: 'Дашборд', href: '/', icon: LayoutDashboard },
     { name: 'Контракты', href: '/contracts', icon: FileText },
-    { name: 'Отчеты', href: '/reports', icon: ClipboardList },
+    { name: 'Премия', href: '/reports', icon: ClipboardList },
     { name: 'Пользователи', href: '/users', icon: Users },
     { name: 'Роли', href: '/roles', icon: Shield },
     { name: 'Ранги', href: '/ranks', icon: TrendingUp },

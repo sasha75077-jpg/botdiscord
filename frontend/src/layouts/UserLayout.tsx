@@ -31,7 +31,7 @@ export default function UserLayout({ children }: Props) {
     { name: 'Заявки', href: '/applications', icon: ClipboardList },
     { name: 'Выплаты', href: '/prices', icon: Banknote },
     { name: 'Таблица', href: '/leaderboard', icon: Trophy },
-    { name: 'Мои отчеты', href: '/reports', icon: ClipboardList },
+    { name: 'Премия', href: '/reports', icon: ClipboardList },
     { name: 'Профиль', href: '/profile', icon: User },
   ];
 
