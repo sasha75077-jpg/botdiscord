@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { authApi } from '@/lib/api';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 // Pages
 import LoginPage from '@/pages/LoginPage';
@@ -79,6 +80,7 @@ function App() {
   // Owner routes
   if (user?.role === 'owner') {
     return (
+      <ErrorBoundary title="Ошибка owner-панели">
       <OwnerLayout>
         <Routes>
           <Route path="/" element={<OwnerDashboard />} />
@@ -92,12 +94,14 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </OwnerLayout>
+      </ErrorBoundary>
     );
   }
 
   // Admin routes
   if (user?.role === 'admin') {
     return (
+      <ErrorBoundary title="Ошибка админ-панели">
       <AdminLayout>
         <Routes>
           <Route path="/" element={<AdminDashboard />} />
@@ -122,12 +126,14 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AdminLayout>
+      </ErrorBoundary>
     );
   }
 
   // Recruiter routes
   if (user?.role === 'recruiter') {
     return (
+      <ErrorBoundary title="Ошибка панели">
       <UserLayout>
         <Routes>
           <Route path="/" element={<UserDashboard />} />
@@ -144,11 +150,13 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </UserLayout>
+      </ErrorBoundary>
     );
   }
 
   // User routes
   return (
+    <ErrorBoundary title="Ошибка панели">
     <UserLayout>
       <Routes>
         <Route path="/" element={<UserDashboard />} />
@@ -166,6 +174,7 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </UserLayout>
+    </ErrorBoundary>
   );
 }
 

@@ -64,6 +64,7 @@ export default function RolesPage() {
   const [adminIds, setAdminIds] = useState<string[]>([]);
   const [recruitIds, setRecruitIds] = useState<string[]>([]);
   const [familyIds, setFamilyIds] = useState<string[]>([]);
+  const [firstRankIds, setFirstRankIds] = useState<string[]>([]);
   const [newDiscordId, setNewDiscordId] = useState('');
   const [newRole, setNewRole] = useState('recruiter');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -99,6 +100,7 @@ export default function RolesPage() {
     setAdminIds(split(s.panel_admin_role_ids));
     setRecruitIds(split(s.panel_recruiter_role_ids));
     setFamilyIds(split(s.family_member_role_ids));
+    setFirstRankIds(split(s.first_rank_role_ids));
   }, [settings]);
 
   const toggle = (list: string[], setList: (v: string[]) => void, id: string) =>
@@ -111,6 +113,7 @@ export default function RolesPage() {
         payload.panel_admin_role_ids = adminIds.join(',');
       }
       payload.family_member_role_ids = familyIds.join(',');
+      payload.first_rank_role_ids = firstRankIds.join(',');
       payload.panel_recruiter_role_ids = recruitIds.join(',');
       await guildsApi.updateSettings(guildId!, payload);
     },
@@ -207,6 +210,19 @@ export default function RolesPage() {
             roles={discordRoles || []}
             selected={familyIds}
             onToggle={(id) => toggle(familyIds, setFamilyIds, id)}
+          />
+        </div>
+      ) : null}
+      {isOwner || user?.role === 'admin' ? (
+        <div className="card">
+          <h2 className="text-xl font-bold mb-1">Первый ранг (выдается при принятии)</h2>
+          <p className="text-sm text-gray-500 mb-3">
+            С этими ролями заявку тоже подать нельзя — человек уже в семье.
+          </p>
+          <RoleChecklist
+            roles={discordRoles || []}
+            selected={firstRankIds}
+            onToggle={(id) => toggle(firstRankIds, setFirstRankIds, id)}
           />
         </div>
       ) : null}

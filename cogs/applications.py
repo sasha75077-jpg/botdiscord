@@ -264,15 +264,6 @@ class ApplicationModal(discord.ui.Modal):
         guild = interaction.guild
         if guild is None:
             return await interaction.response.send_message("❌ Только на сервере.", ephemeral=True)
-        try:
-            fam_raw = await get_setting("family_member_role_ids", str(guild.id)) or ""
-            fam_ids = {x.strip() for x in fam_raw.split(",") if x.strip().isdigit()}
-            if fam_ids and isinstance(interaction.user, discord.Member):
-                if any(str(r.id) in fam_ids for r in interaction.user.roles):
-                    return await interaction.response.send_message(
-                        "❌ Ты уже состоишь в семье — заявка не нужна.", ephemeral=True)
-        except Exception:
-            pass
         answers: dict = {}
         for q, inp in self.inputs:
             v = (inp.value or "").strip()
@@ -288,6 +279,18 @@ class ApplicationModal(discord.ui.Modal):
         )
         if dup:
             return await interaction.response.send_message("❌ У тебя уже есть открытая или принятая заявка.", ephemeral=True)
+        # Уже в семье (фам-роль или первый ранг) - подавать нельзя
+        try:
+            if isinstance(interaction.user, discord.Member):
+                _fam = await get_setting("family_member_role_ids", str(guild.id)) or ""
+                _first = await get_setting("first_rank_role_ids", str(guild.id)) or ""
+                _have = {str(r.id) for r in interaction.user.roles}
+                _no = {x.strip() for x in (_fam + "," + _first).split(",") if x.strip().isdigit()}
+                if _have & _no:
+                    return await interaction.response.send_message(
+                        "❌ Ты уже состоишь в семье — заявка не нужна.", ephemeral=True)
+        except Exception:
+            pass
         # + проверка сайта (там может висеть несинкнутая)
         try:
             import urllib.request as _u, json as _j, os as _o
@@ -772,7 +775,8 @@ class ApplicationsCog(commands.Cog):
 
         if accepted:
             accept_raw = await get_setting(SET_ACCEPT_ROLES_KEY, str(guild.id)) or await get_setting(SET_ACCEPT_ROLES_KEY)
-            role_ids = parse_id_list(accept_raw)
+            first_raw = await get_setting("first_rank_role_ids", str(guild.id))
+            role_ids = parse_id_list(accept_raw) + [x for x in parse_id_list(first_raw) if x not in parse_id_list(accept_raw)]
             roles = [guild.get_role(rid) for rid in role_ids]
             roles = [r for r in roles if r is not None]
             if roles:
@@ -1016,6 +1020,13 @@ class ApplicationsCog(commands.Cog):
             if accepted:
                 role_ids = parse_id_list(await get_setting(SET_ACCEPT_ROLES_KEY, str(guild.id))
                                          or await get_setting(SET_ACCEPT_ROLES_KEY))
+                try:
+                    first_raw = await get_setting("first_rank_role_ids", str(guild.id)) or ""
+                    for _fr in parse_id_list(first_raw):
+                        if _fr not in role_ids:
+                            role_ids.append(_fr)
+                except Exception:
+                    pass
                 roles = [guild.get_role(rid) for rid in role_ids]
                 roles = [r for r in roles if r is not None]
                 if roles:

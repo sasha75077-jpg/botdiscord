@@ -128,7 +128,13 @@ async function checkApplicant(env: Env, guildId: string, discordId: string): Pro
   const famRow = await env.DB.prepare(
     "SELECT setting_value FROM guild_settings WHERE guild_id = ? AND setting_key = 'family_member_role_ids'"
   ).bind(guildId).first<{ setting_value: string }>()
-  const famIds = (famRow?.setting_value || '').split(',').map((s) => s.trim()).filter(Boolean)
+  const firstRow = await env.DB.prepare(
+    "SELECT setting_value FROM guild_settings WHERE guild_id = ? AND setting_key = 'first_rank_role_ids'"
+  ).bind(guildId).first<{ setting_value: string }>()
+  const famIds = [
+    ...(famRow?.setting_value || '').split(','),
+    ...(firstRow?.setting_value || '').split(','),
+  ].map((s) => s.trim()).filter(Boolean)
   if (famIds.length === 0) return null
 
   try {
