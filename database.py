@@ -88,10 +88,29 @@ async def migrate_db():
             pass  # колонка уже есть
 
         # permissions: роль recruiter в CHECK (старые БД без нее)
+        # Плюс восстановление: если users/permissions пропали, а *_new остались
+        try:
+            async with db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('permissions', 'permissions_new', 'users', 'users_new')") as cursor:
+                have = {r[0] for r in await cursor.fetchall()}
+            if 'permissions' not in have and 'permissions_new' in have:
+                await db.execute("ALTER TABLE permissions_new RENAME TO permissions")
+                print("✅ permissions: восстановлена из permissions_new")
+                async with db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('permissions', 'permissions_new', 'users', 'users_new')") as cursor:
+                    have = {r[0] for r in await cursor.fetchall()}
+            if 'users' not in have and 'users_new' in have:
+                await db.execute("DROP VIEW IF EXISTS v_contract_value")
+                await db.execute("ALTER TABLE users_new RENAME TO users")
+                print("✅ users: восстановлена из users_new")
+                async with db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('permissions', 'permissions_new', 'users', 'users_new')") as cursor:
+                    have = {r[0] for r in await cursor.fetchall()}
+        except Exception as e:
+            print(f"⚠️  recover check: {e}")
+
         try:
             async with db.execute("SELECT sql FROM sqlite_master WHERE name='permissions'") as cursor:
                 prow = await cursor.fetchone()
             if prow and "'recruiter'" not in (prow[0] or ''):
+                await db.execute("DROP TABLE IF EXISTS permissions_new")
                 await db.execute("""CREATE TABLE permissions_new (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     guild_id TEXT NOT NULL,
@@ -104,6 +123,12 @@ async def migrate_db():
                 await db.execute(
                     "INSERT INTO permissions_new (id, guild_id, discord_id, role, granted_at, granted_by)"
                     " SELECT id, guild_id, discord_id, role, granted_at, granted_by FROM permissions")
+                async with db.execute("SELECT COUNT(*) FROM permissions") as c1, \
+                           db.execute("SELECT COUNT(*) FROM permissions_new") as c2:
+                    n_old = (await c1.fetchone())[0]
+                    n_new = (await c2.fetchone())[0]
+                if n_new < n_old:
+                    raise RuntimeError(f"permissions copy mismatch {n_new} < {n_old}")
                 await db.execute("DROP TABLE permissions")
                 await db.execute("ALTER TABLE permissions_new RENAME TO permissions")
                 print("✅ permissions: добавлен recruiter в CHECK")
@@ -114,7 +139,9 @@ async def migrate_db():
         try:
             async with db.execute("SELECT sql FROM sqlite_master WHERE name='users'") as cursor:
                 urow = await cursor.fetchone()
-            if urow and "UNIQUE(discord_id, guild_id)" not in (urow[0] or '').replace(" ", "").replace("\n", ""):
+            norm = (urow[0] or '').replace(" ", "").replace("\n", "").replace('"', '') if urow else ''
+            if urow and "UNIQUE(discord_id,guild_id)" not in norm:
+                await db.execute("DROP TABLE IF EXISTS users_new")
                 await db.execute("""CREATE TABLE users_new (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     discord_id TEXT NOT NULL,
@@ -130,6 +157,13 @@ async def migrate_db():
                     " family_total, tuning_total, static)"
                     " SELECT discord_id, COALESCE(guild_id, '880440495233454080'),"
                     " current_rank_id, surname_changed, family_total, tuning_total, static FROM users")
+                async with db.execute("SELECT COUNT(*) FROM users") as c1, \
+                           db.execute("SELECT COUNT(*) FROM users_new") as c2:
+                    n_old = (await c1.fetchone())[0]
+                    n_new = (await c2.fetchone())[0]
+                if n_new < n_old:
+                    raise RuntimeError(f"users copy mismatch {n_new} < {n_old}")
+                await db.execute("DROP VIEW IF EXISTS v_contract_value")
                 await db.execute("DROP TABLE users")
                 await db.execute("ALTER TABLE users_new RENAME TO users")
                 print("✅ users: разделение по серверам")
