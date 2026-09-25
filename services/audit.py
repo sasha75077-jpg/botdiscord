@@ -34,5 +34,14 @@ async def audit_contracts(client, embed, guild_id: str | None = None):
 async def audit_bonus(client, embed):       return await send_audit_log(client, embed, "log_bonus")
 async def audit_promotions(client, embed):  return await send_audit_log(client, embed, "log_promo")
 
-async def audit_bonus_log(client, embed):
+async def audit_bonus_log(client, embed, guild_id: str | None = None):
+    if guild_id:
+        try:
+            raw = await get_setting("bonus_audit_channel_id", str(guild_id))
+            if raw and str(raw).strip().isdigit():
+                ch = client.get_channel(int(raw)) or await client.fetch_channel(int(raw))
+                await ch.send(embed=embed)
+                return True
+        except Exception:
+            pass
     return await send_audit_log(client, embed, "log_bonus_audit")

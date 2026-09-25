@@ -20,6 +20,7 @@ export default function NotificationsPage() {
   const [uploadChannel, setUploadChannel] = useState('');
   const [appsChannel, setAppsChannel] = useState('');
   const [bonusChannel, setBonusChannel] = useState('');
+  const [bonusAuditChannel, setBonusAuditChannel] = useState('');
   const [promoChannel, setPromoChannel] = useState('');
   const [promoReportsChannel, setPromoReportsChannel] = useState('');
   const [auditChannel, setAuditChannel] = useState('');
@@ -50,6 +51,7 @@ export default function NotificationsPage() {
     setUploadChannel(s.contracts_upload_channel_id || '');
     setAppsChannel(s.applications_log_channel_id || '');
     setBonusChannel(s.bonus_log_channel_id || '');
+    setBonusAuditChannel(s.bonus_audit_channel_id || '');
     setPromoChannel(s.promo_panel_channel_id || s.promo_log_channel_id || '');
     setPromoReportsChannel(s.promo_log_channel_id || '');
     setAuditChannel(s.contracts_audit_channel_id || '');
@@ -65,6 +67,7 @@ export default function NotificationsPage() {
         contracts_upload_channel_id: uploadChannel,
         applications_log_channel_id: appsChannel,
         bonus_log_channel_id: bonusChannel,
+        bonus_audit_channel_id: bonusAuditChannel,
         promo_panel_channel_id: promoChannel,
         promo_log_channel_id: promoReportsChannel,
         contracts_audit_channel_id: auditChannel,
@@ -153,6 +156,20 @@ export default function NotificationsPage() {
         <label className="block text-sm font-medium mb-2">Канал</label>
         <select value={bonusChannel} onChange={(e) => setBonusChannel(e.target.value)} className="input w-full max-w-md">
           <option value="">— не выбран —</option>
+          {channels.map((ch: any) => (
+            <option key={ch.id} value={ch.id}># {ch.name}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="card">
+        <h2 className="text-xl font-bold mb-1">Аудит премий (принято/отклонено)</h2>
+        <p className="text-sm text-gray-500 mb-3">
+          Сюда падают таблички решений. Отдельно на каждый сервер.
+        </p>
+        <label className="block text-sm font-medium mb-2">Канал</label>
+        <select value={bonusAuditChannel} onChange={(e) => setBonusAuditChannel(e.target.value)} className="input w-full max-w-md">
+          <option value="">— не выбран (общий лог) —</option>
           {channels.map((ch: any) => (
             <option key={ch.id} value={ch.id}># {ch.name}</option>
           ))}

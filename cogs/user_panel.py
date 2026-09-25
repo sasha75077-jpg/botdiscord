@@ -609,7 +609,12 @@ class BonusPreviewPagerView(discord.ui.View):
             (float(total), self.report_id)
         )
 
-        raw = await get_setting("log_bonus")
+        raw = None
+        try:
+            _ag2 = str(interaction.guild.id) if interaction.guild else getattr(self, 'gid', None)
+            raw = await get_setting("bonus_log_channel_id", _ag2) or await get_setting("log_bonus")
+        except Exception:
+            raw = await get_setting("log_bonus")
         if raw:
             try:
                 log_ch_id = int(raw)

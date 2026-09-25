@@ -4613,7 +4613,8 @@ async def approve_bonus(interaction: discord.Interaction, report_id: int):
     log.add_field(name="Дары моря", value=str(round(sea, 2)), inline=True)
     log.add_field(name="Итого премии", value=str(round(total, 2)), inline=False)
 
-    await audit_bonus_log(interaction.client, log)
+    await audit_bonus_log(interaction.client, log,
+                            str(interaction.guild.id) if interaction.guild else None)
 
 
 class RejectBonusModal(discord.ui.Modal, title="Отклонение премии"):
@@ -4714,7 +4715,8 @@ class RejectBonusModal(discord.ui.Modal, title="Отклонение преми�
         log.add_field(name="Итого премии", value=str(round(total, 2)), inline=False)
         log.add_field(name="Причина", value=reason_text[:1000], inline=False)
 
-        await audit_bonus_log(interaction.client, log)
+        await audit_bonus_log(interaction.client, log,
+                            str(interaction.guild.id) if interaction.guild else None)
 
 
 ADMIN_PANEL_CH_KEY = "admin_panel_channel_id"
