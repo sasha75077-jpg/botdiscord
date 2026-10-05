@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { authApi } from '@/lib/api';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -37,6 +37,19 @@ import UserLayout from '@/layouts/UserLayout';
 
 function App() {
   const { isAuthenticated, user, login } = useAuthStore();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // GitHub Pages SPA fallback: после редиректа с 404 путь лежит в ?p=
+  useEffect(() => {
+    const p = searchParams.get('p');
+    if (p) {
+      const clean = p.split('?')[0];
+      window.history.replaceState(null, '', clean);
+      searchParams.delete('p');
+      setSearchParams(searchParams, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Тихо обновить сессию при загрузке: роль могла измениться (сверка выдала права).
   // refresh выдает токены уже с актуальной ролью из базы.

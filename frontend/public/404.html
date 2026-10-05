@@ -5,11 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Melancholia Panel</title>
     <script>
-      // GitHub Pages SPA fallback: сохраняем путь и редиректим на index.html
+      // GitHub Pages SPA fallback: сохраняем путь и параметры, редиректим на index.html
       (function() {
         var path = window.location.pathname;
+        var search = window.location.search;
+        var hash = window.location.hash;
         if (path !== '/' && !path.endsWith('.html')) {
-          var redirect = '/' + '?p=' + encodeURIComponent(path + window.location.search + window.location.hash);
+          var redirect = '/?p=' + encodeURIComponent(path + search + hash);
           window.location.replace(redirect);
         }
       })();
