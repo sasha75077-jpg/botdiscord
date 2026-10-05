@@ -1,6 +1,6 @@
 # 🤖 Melancholia — Discord-бот + веб-панель
 
-Мультисерверный Discord-бот (Python) + веб-панель: Cloudflare Pages (фронт) + Cloudflare Workers (API) + Cloudflare D1 (база панели). Локальная `bot.db` бота двусторонне синхронизируется с облаком.
+Мультисерверный Discord-бот (Python) + веб-панель: Cloudflare Workers (панель на `melancholia-panel` + API на `melancholia-api`) + Cloudflare D1 (база панели). Pages (`botdiscord-87a.pages.dev`) оставлен запасным зеркалом — основной вход через воркер, т.к. `*.pages.dev` блочится в РФ. Локальная `bot.db` бота двусторонне синхронизируется с облаком.
 
 ## 🏗️ Архитектура
 

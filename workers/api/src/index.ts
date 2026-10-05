@@ -33,7 +33,7 @@ const app = new Hono<{ Bindings: Env }>()
 
 // CORS
 app.use('*', cors({
-  origin: ['https://botdiscord-87a.pages.dev', 'http://localhost:5173'],
+  origin: ['https://melancholia-panel.sasha75077.workers.dev', 'https://botdiscord-87a.pages.dev', 'http://localhost:5173'],
   credentials: true,
 }))
 
