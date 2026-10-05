@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { authApi } from '@/lib/api';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -37,34 +37,6 @@ import UserLayout from '@/layouts/UserLayout';
 
 function App() {
   const { isAuthenticated, user, login } = useAuthStore();
-  const [searchParams, setSearchParams] = useSearchParams();
-
-  // GitHub Pages SPA fallback: после редиректа с 404 путь в ?p=, параметры в ?q=
-  useEffect(() => {
-    const p = searchParams.get('p');
-    const q = searchParams.get('q');
-    if (p) {
-      const target = p + (q || '');
-      window.history.replaceState(null, '', target);
-      searchParams.delete('p');
-      searchParams.delete('q');
-      setSearchParams(searchParams, { replace: true });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Если пришли напрямую на /auth/callback (GitHub Pages отдал index.html)
-  useEffect(() => {
-    if (window.location.pathname === '/auth/callback') {
-      const params = new URLSearchParams(window.location.search);
-      const code = params.get('code');
-      const state = params.get('state');
-      if (code) {
-        // Передаем в React Router через навигацию
-        window.history.replaceState(null, '', '/auth/callback?code=' + code + (state ? '&state=' + state : ''));
-      }
-    }
-  }, []);
 
   // Тихо обновить сессию при загрузке: роль могла измениться (сверка выдала права).
   // refresh выдает токены уже с актуальной ролью из базы.
