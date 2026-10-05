@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Melancholia Panel</title>
+    <script>
+      // GitHub Pages SPA fallback: сохраняем путь и редиректим на index.html
+      (function() {
+        var path = window.location.pathname;
+        if (path !== '/' && !path.endsWith('.html')) {
+          var redirect = '/' + '?p=' + encodeURIComponent(path + window.location.search + window.location.hash);
+          window.location.replace(redirect);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
