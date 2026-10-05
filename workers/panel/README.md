@@ -3,7 +3,24 @@
 Фронт раздается как Workers Static Assets с `workers.dev`-домена,
 который в РФ открывается (в отличие от `*.pages.dev`).
 
-## Деплой
+## Деплой на GitHub Pages
+
+Фронт также можно задеплоить на GitHub Pages через GitHub Actions:
+
+```bash
+cd frontend
+$env:VITE_API_URL="https://melancholia-api.sasha75077.workers.dev"
+$env:VITE_BASE_PATH="/botdiscord/"
+npm run build
+rm -f dist/_redirects dist/_headers
+```
+
+Workflow: `.github/workflows/deploy-pages.yml` — автоматический деплой при push в main.
+Адрес: `https://sasha75077-jpg.github.io/botdiscord/`
+
+Для включения: Settings → Pages → Source → GitHub Actions.
+
+## Деплой на Workers
 
 ```bash
 cd frontend
@@ -27,5 +44,6 @@ SPA-фолбэк дает `not_found_handling = "single-page-application"`.
 - CORS API (`workers/api/src/index.ts`) должен содержать URL панели.
 - `FRONTEND_URL` API = URL панели (Discord OAuth `redirect_uri`).
 - Discord Developer Portal → OAuth2 → Redirects: добавить
-  `https://melancholia-panel.sasha75077.workers.dev/auth/callback`.
+  `https://melancholia-panel.sasha75077.workers.dev/auth/callback`
+  и/или `https://sasha75077-jpg.github.io/botdiscord/auth/callback`.
 - Pages (`botdiscord-87a.pages.dev`) оставлен как запасное зеркало.
