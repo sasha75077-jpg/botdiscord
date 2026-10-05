@@ -53,6 +53,19 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Если пришли напрямую на /auth/callback (GitHub Pages отдал index.html)
+  useEffect(() => {
+    if (window.location.pathname === '/auth/callback') {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+      const state = params.get('state');
+      if (code) {
+        // Передаем в React Router через навигацию
+        window.history.replaceState(null, '', '/auth/callback?code=' + code + (state ? '&state=' + state : ''));
+      }
+    }
+  }, []);
+
   // Тихо обновить сессию при загрузке: роль могла измениться (сверка выдала права).
   // refresh выдает токены уже с актуальной ролью из базы.
   useEffect(() => {

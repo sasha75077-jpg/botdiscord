@@ -4,21 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Melancholia Panel</title>
-    <script>
-      // GitHub Pages SPA fallback: сохраняем путь и ВСЕ параметры
-      (function() {
-        var path = window.location.pathname;
-        var search = window.location.search;
-        var hash = window.location.hash;
-        if (path !== '/' && !path.endsWith('.html')) {
-          // Редирект на корень с сохранением пути и параметров
-          var redirect = '/?p=' + encodeURIComponent(path) + '&q=' + encodeURIComponent(search + hash);
-          window.location.replace(redirect);
-        }
-      })();
-    </script>
+    <meta http-equiv="refresh" content="0; url=/" />
+    <link rel="canonical" href="/" />
   </head>
   <body>
-    <div id="root"></div>
+    <p>Перенаправление на <a href="/">главную</a>...</p>
   </body>
 </html>
