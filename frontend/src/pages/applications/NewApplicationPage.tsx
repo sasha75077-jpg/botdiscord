@@ -2,6 +2,7 @@ import { useAuthStore } from '@/store/authStore';
 import ApplicationForm from '@/components/ApplicationForm';
 import { Users, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { href } from '@/lib/nav';
 
 export default function NewApplicationPage() {
   const { user } = useAuthStore();
@@ -38,7 +39,7 @@ export default function NewApplicationPage() {
           onSuccess={() => {
             // Редирект после успешной отправки
             setTimeout(() => {
-              window.location.href = '/';
+              window.location.href = href('/');
             }, 2000);
           }}
         />

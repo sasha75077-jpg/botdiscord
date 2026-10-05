@@ -4,9 +4,43 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Melancholia Panel</title>
+    <!--
+      GitHub Pages не умеет отдавать index.html для несуществующих путей
+      (например /botdiscord/auth/callback — сюда редиректит Discord).
+      Вместо этого отдаётся этот файл со статусом 404, и мы переводим
+      путь в hash-маршрут: /botdiscord/auth/callback?code=x
+        -> /botdiscord/#/auth/callback?code=x
+      Значение __BASE_PATH__ подставляется скриптом scripts/postbuild.mjs
+      из переменной VITE_BASE_PATH при сборке.
+    -->
+    <script>
+      (function () {
+        var base = '__BASE_PATH__';
+        if (base.charAt(0) !== '/') base = '/' + base;
+        if (base.charAt(base.length - 1) !== '/') base += '/';
+
+        var path = location.pathname;
+        var search = location.search || '';
+
+        // Устаревший хеш-ассет (index-XXXX.js и т.п.) — просто уходим в приложение
+        if (/\.(js|mjs|css|map|png|jpe?g|gif|svg|ico|webp|json|woff2?|ttf|otf)$/i.test(path)) {
+          location.replace(base);
+          return;
+        }
+
+        // Отрезаем базовый префикс, получаем "/auth/callback"
+        var rest = path;
+        if (path.indexOf(base) === 0) rest = path.slice(base.length - 1);
+        if (rest.charAt(0) !== '/') rest = '/' + rest;
+
+        location.replace(base + '#' + rest + search);
+      })();
+    </script>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/assets/index-C6oedjbz.js"></script>
+    <noscript>
+      Для работы панели нужен включённый JavaScript.
+      <a href="/botdiscord/">Перейти на главную</a>
+    </noscript>
   </body>
 </html>

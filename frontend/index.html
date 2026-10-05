@@ -2,9 +2,17 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Melancholia Panel</title>
+    <script>
+      // Если Discord отдал код на index.html (?code=...), а hash-маршрута ещё нет —
+      // переводим его в hash, иначе HashRouter его не увидит.
+      try {
+        if (!location.hash && /[?&]code=/.test(location.search)) {
+          location.replace('%BASE_URL%#/auth/callback' + location.search);
+        }
+      } catch (e) {}
+    </script>
     <script>
       // Тема до отрисовки (без мигания): auto = за системой
       try {

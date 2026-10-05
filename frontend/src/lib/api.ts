@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { href } from './nav';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -48,7 +49,7 @@ api.interceptors.response.use(
       } catch (refreshError) {
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
-        window.location.href = '/login';
+        window.location.href = href('/login');
         return Promise.reject(refreshError);
       }
     }

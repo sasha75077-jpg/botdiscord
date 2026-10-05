@@ -2,6 +2,7 @@ import { useAuthStore } from '@/store/authStore';
 import ContractForm from '@/components/ContractForm';
 import { FileText, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { href } from '@/lib/nav';
 
 export default function NewContractPage() {
   const { user } = useAuthStore();
@@ -59,7 +60,7 @@ export default function NewContractPage() {
           restrictedToAgitation={isRecruiter}
           onSuccess={() => {
             // Можно добавить редирект или уведомление
-            window.location.href = '/contracts';
+            window.location.href = href('/contracts');
           }}
         />
       </div>
