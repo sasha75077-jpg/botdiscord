@@ -24,7 +24,7 @@ database_id = "c841094d-0183-4369-ae5e-43cca4c2632f"
 # Environment variables
 [vars]
 DISCORD_API_ENDPOINT = "https://discord.com/api/v10"
-FRONTEND_URL = "https://melancholia-panel.sasha75077.workers.dev"
+FRONTEND_URL = "https://sasha75077-jpg.github.io/botdiscord"
 
 # Secrets (set via wrangler secret put)
 # DISCORD_CLIENT_ID
