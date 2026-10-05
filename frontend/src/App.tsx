@@ -39,13 +39,15 @@ function App() {
   const { isAuthenticated, user, login } = useAuthStore();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // GitHub Pages SPA fallback: после редиректа с 404 путь лежит в ?p=
+  // GitHub Pages SPA fallback: после редиректа с 404 путь в ?p=, параметры в ?q=
   useEffect(() => {
     const p = searchParams.get('p');
+    const q = searchParams.get('q');
     if (p) {
-      const clean = p.split('?')[0];
-      window.history.replaceState(null, '', clean);
+      const target = p + (q || '');
+      window.history.replaceState(null, '', target);
       searchParams.delete('p');
+      searchParams.delete('q');
       setSearchParams(searchParams, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
