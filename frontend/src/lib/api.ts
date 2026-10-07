@@ -8,6 +8,10 @@ export const asArray = (v: any): any[] => (Array.isArray(v) ? v : []);
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
+  // Без таймаута браузер держит упавшее соединение минутами (браузерный
+  // дефолт — до 5+ минут), и страница висит в «Загрузка...».
+  //20 с: первый «холодный» коннект к workers.dev укладывается, зависший — нет.
+  timeout: 20000,
   headers: {
     'Content-Type': 'application/json',
   },

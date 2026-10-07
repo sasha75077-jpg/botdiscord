@@ -35,6 +35,10 @@ const app = new Hono<{ Bindings: Env }>()
 app.use('*', cors({
   origin: ['https://sasha75077-jpg.github.io', 'https://melancholia-panel.sasha75077.workers.dev', 'https://botdiscord-87a.pages.dev', 'http://localhost:5173'],
   credentials: true,
+  // Кэш префлайта: без него браузер шлёт OPTIONS на КАЖДЫЙ запрос с
+  // Authorization — при7 параллельных запросах это7 лишних соединений,
+  // которые на медленном/рвущемся канале стоят минуты.
+  maxAge: 86400,
 }))
 
 // Health check
