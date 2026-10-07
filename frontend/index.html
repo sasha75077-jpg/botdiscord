@@ -4,6 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Melancholia Panel</title>
+    <!--
+      Начинаем DNS+TLS к API сразу при разборе HTML, пока грузится бандл.
+      Без этого первые XHR уходят по холодному соединению и на медленном
+      канале к workers.dev провисают 10-20 секунд.
+    -->
+    <link rel="preconnect" href="https://melancholia-api.sasha75077.workers.dev" crossorigin />
+    <link rel="dns-prefetch" href="https://melancholia-api.sasha75077.workers.dev" />
     <script>
       // Если Discord отдал код на index.html (?code=...), а hash-маршрута ещё нет —
       // переводим его в hash, иначе HashRouter его не увидит.

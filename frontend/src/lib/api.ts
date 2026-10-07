@@ -11,7 +11,7 @@ export const api = axios.create({
   // Без таймаута браузер держит упавшее соединение минутами (браузерный
   // дефолт — до 5+ минут), и страница висит в «Загрузка...».
   //20 с: первый «холодный» коннект к workers.dev укладывается, зависший — нет.
-  timeout: 20000,
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -32,7 +32,12 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // API отдает 403 и на протухший токен (не только 401) — например,
+    // /dashboard без валидного access_token. Если реагировать только на 401,
+    // истекший токен навсегда оставляет панель пустой. _retry гарантирует,
+    // что на реальной нехватке прав будет ровно одна попытка refresh.
+    const status = error.response?.status;
+    if ((status === 401 || status === 403) && !originalRequest._retry) {
       originalRequest._retry = true;
 
       try {
