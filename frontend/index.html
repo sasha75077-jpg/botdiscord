@@ -4,6 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Melancholia Panel</title>
+    <!-- Иначе браузер сам лезет в /favicon.ico и получает 404 (GitHub Pages отдаёт 404.html) -->
+    <link rel="icon" href="%BASE_URL%favicon.ico" />
     <!--
       Начинаем DNS+TLS к API сразу при разборе HTML, пока грузится бандл.
       Без этого первые XHR уходят по холодному соединению и на медленном
