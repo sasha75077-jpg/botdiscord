@@ -202,6 +202,47 @@ async def migrate_db():
         except Exception as e:
             print(f"⚠️  v_contract_value migrate: {e}")
 
+        # rank_requirements_*: снять легаси-FK на ranks_old.
+        # ranks_old содержит только старые ранги одной гильдии (id 3-10), а ranks —
+        # мультигильдийная, где у других серверов id выше (11-18). Из-за этого
+        # вставка требований для не-Melancholia падала по FOREIGN KEY.
+        for tname, extra_ddl, extra_cols in (
+            ("rank_requirements_main", "", ""),
+            ("rank_requirements_alt",
+             ", tuning_contracts INTEGER NOT NULL DEFAULT 0"
+             ", require_surname_change INTEGER NOT NULL DEFAULT 0",
+             ", tuning_contracts, require_surname_change"),
+        ):
+            try:
+                async with db.execute(
+                    "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+                    (tname,)) as cursor:
+                    trow = await cursor.fetchone()
+                tsql = (trow[0] or "") if trow else ""
+                if "ranks_old" not in tsql:
+                    continue  # таблицы нет или FK уже убран
+                await db.execute(f"DROP TABLE IF EXISTS {tname}_new")
+                await db.execute(f"""CREATE TABLE {tname}_new (
+                    rank_from INTEGER NOT NULL,
+                    rank_to INTEGER NOT NULL,
+                    family_contracts INTEGER NOT NULL DEFAULT 0{extra_ddl},
+                    PRIMARY KEY (rank_from, rank_to))""")
+                await db.execute(
+                    f"INSERT OR IGNORE INTO {tname}_new"
+                    f" (rank_from, rank_to, family_contracts{extra_cols})"
+                    f" SELECT rank_from, rank_to, family_contracts{extra_cols} FROM {tname}")
+                async with db.execute(f"SELECT COUNT(*) FROM {tname}") as c1, \
+                           db.execute(f"SELECT COUNT(*) FROM {tname}_new") as c2:
+                    n_old = (await c1.fetchone())[0]
+                    n_new = (await c2.fetchone())[0]
+                if n_new < n_old:
+                    raise RuntimeError(f"{tname} copy mismatch {n_new} < {n_old}")
+                await db.execute(f"DROP TABLE {tname}")
+                await db.execute(f"ALTER TABLE {tname}_new RENAME TO {tname}")
+                print(f"✅ {tname}: снят легаси-FK на ranks_old")
+            except Exception as e:
+                print(f"⚠️  {tname} migrate: {e}")
+
         await db.commit()
     finally:
         await db.close()
