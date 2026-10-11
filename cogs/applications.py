@@ -11,6 +11,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 from database import execute, fetch_one, fetch_all, get_setting, set_setting
+from services.api_http import api_call
 
 GUILD_ID = 880440495233454080
 LOG_CHANNEL_ID = 1386771246733066433
@@ -47,16 +48,8 @@ def _api_req(method, path, payload=None):
     key = _panel_key()
     if not key:
         return None
-    data = json.dumps(payload).encode("utf-8") if payload is not None else None
-    req = urllib.request.Request(
-        PANEL_API_URL + path,
-        data=data,
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}",
-                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
-        method=method,
-    )
-    with urllib.request.urlopen(req, timeout=15) as r:
-        return json.loads(r.read().decode("utf-8"))
+    # gzip + UA + повтор на свежем соединении - в services/api_http.py
+    return api_call(method, path, payload, secret=key)
 
 
 async def panel_role_of(guild_id: str, user_id: str) -> str:
@@ -293,17 +286,10 @@ class ApplicationModal(discord.ui.Modal):
             pass
         # + проверка сайта (там может висеть несинкнутая)
         try:
-            import urllib.request as _u, json as _j, os as _o
-            _key = _o.getenv("PANEL_SYNC_SECRET", "")
-            _api = _o.getenv("PANEL_API_URL", "https://melancholia-api.sasha75077.workers.dev").rstrip("/")
-            if _key:
-                _req = _u.Request(
-                    f"{_api}/guilds/{guild.id}/applications/open?discord_id={interaction.user.id}",
-                    headers={"Authorization": f"Bearer {_key}",
-                             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
-                    method="GET")
-                with _u.urlopen(_req, timeout=10) as _r:
-                    _d = _j.loads(_r.read().decode("utf-8"))
+            if _panel_key():
+                _d = await asyncio.to_thread(
+                    _api_req, "GET",
+                    f"/guilds/{guild.id}/applications/open?discord_id={interaction.user.id}")
                 if (_d or {}).get("open"):
                     return await interaction.response.send_message("❌ У тебя уже есть открытая заявка (на сайте).", ephemeral=True)
         except Exception as e:

@@ -12,17 +12,15 @@
 import asyncio
 import json
 import os
-import time
 import urllib.parse
-import urllib.request
 
 import discord
 
 from database import execute, fetch_all, fetch_one, get_setting, set_setting
+from services.api_http import api_delete, api_get, api_post
 
 API_URL = os.getenv("PANEL_API_URL", "https://melancholia-api.sasha75077.workers.dev").rstrip("/")
 SYNC_SECRET = os.getenv("PANEL_SYNC_SECRET", "")
-BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 
 ADMIN_KEY = "panel_admin_role_ids"
 RECRUIT_KEY = "panel_recruiter_role_ids"
@@ -33,52 +31,18 @@ def _parse_ids(s):
     return [x.strip() for x in (s or "").split(",") if x.strip().isdigit()]
 
 
-# Первое соединение к workers.dev из РФ иногда виснет (DPI/канал), а свежее
-# проходит — поэтому на GET один повтор с новым соединением вместо пропуска цикла.
-_API_TIMEOUT = 15
-
-
 def _api_get(path):
-    headers = {"User-Agent": BROWSER_UA}
-    if SYNC_SECRET:
-        headers["Authorization"] = f"Bearer {SYNC_SECRET}"
-    req = urllib.request.Request(API_URL + path, method="GET", headers=headers)
-    last_err = None
-    for attempt in (1, 2):
-        try:
-            with urllib.request.urlopen(req, timeout=_API_TIMEOUT) as r:
-                return json.loads(r.read().decode("utf-8"))
-        except Exception as e:
-            last_err = e
-            if attempt == 1:
-                time.sleep(2)
-    raise last_err
+    # gzip + повтор на свежем соединении живут в services/api_http.py
+    return api_get(path)
 
 
 def _api_post(path, payload, method="POST"):
-    if not SYNC_SECRET:
-        return
-    req = urllib.request.Request(
-        API_URL + path,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {SYNC_SECRET}",
-                 "User-Agent": BROWSER_UA},
-        method=method,
-    )
-    with urllib.request.urlopen(req, timeout=10) as r:
-        r.read()
+    # Некоторые вызовы шлют PUT (панели), поэтому метод пробрасывается
+    return api_call(method, path, payload)
 
 
 def _api_delete(path):
-    if not SYNC_SECRET:
-        return
-    req = urllib.request.Request(
-        API_URL + path,
-        headers={"Authorization": f"Bearer {SYNC_SECRET}", "User-Agent": BROWSER_UA},
-        method="DELETE",
-    )
-    with urllib.request.urlopen(req, timeout=10) as r:
-        r.read()
+    return api_delete(path)
 
 
 async def bot_log(bot, guild_id, message, level="error", source="role-sync"):

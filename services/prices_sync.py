@@ -1,22 +1,15 @@
 import asyncio
-import json
 import os
-import urllib.request
+
+from services.api_http import api_call
 
 API_URL = os.getenv("PANEL_API_URL", "https://melancholia-api.sasha75077.workers.dev").rstrip("/")
 SYNC_SECRET = os.getenv("PANEL_SYNC_SECRET", "")
 
 
 def _api(method, path, payload=None):
-    req = urllib.request.Request(
-        API_URL + path,
-        data=json.dumps(payload).encode("utf-8") if payload is not None else None,
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {SYNC_SECRET}",
-                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
-        method=method,
-    )
-    with urllib.request.urlopen(req, timeout=15) as r:
-        return json.loads(r.read().decode("utf-8"))
+    # gzip + маскировка UA + защита от обрыва живут в services/api_http.py
+    return api_call(method, path, payload)
 
 
 async def pull_prices() -> bool:
