@@ -62,15 +62,23 @@ async def migrate_db():
             print("⚠️  Таблица guilds не найдена. Пропускаем дополнительные миграции.")
             return
 
-        # Создать индекс для bonus_reports если его нет.
-        # В try/except: если в данных уже есть дубли активных отчётов (например
-        # отчёты без недели), индекс не встанет — но это не должно ронять
-        # остальные миграции.
+        # Индекс «одна активная премия за неделю».
+        # Действует ТОЛЬКО на отчёты с заполненной неделей: импорт с сайта
+        # даёт NEW-отчёты без week_start/week_end (реальные разные заявки),
+        # и без условия по неделям они считались бы дублями и роняли индекс.
+        # Сначала снимаем старую версию индекса (иначе IF NOT EXISTS пропустит).
+        try:
+            await db.execute(
+                "DROP INDEX IF EXISTS ux_bonus_reports_week_active")
+        except Exception:
+            pass
         try:
             await db.execute("""
                 CREATE UNIQUE INDEX IF NOT EXISTS ux_bonus_reports_week_active
                 ON bonus_reports(guild_id, discord_id, week_start, week_end)
-                WHERE status IN ('NEW','TAKEN','APPROVED');
+                WHERE status IN ('NEW','TAKEN','APPROVED')
+                  AND week_start IS NOT NULL AND week_start != ''
+                  AND week_end IS NOT NULL AND week_end != '';
             """)
         except Exception as e:
             print(f"⚠️  ux_bonus_reports_week_active: не создан ({e})")
