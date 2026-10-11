@@ -12,6 +12,7 @@
 import asyncio
 import json
 import os
+import time
 import urllib.parse
 import urllib.request
 
@@ -32,13 +33,26 @@ def _parse_ids(s):
     return [x.strip() for x in (s or "").split(",") if x.strip().isdigit()]
 
 
+# Первое соединение к workers.dev из РФ иногда виснет (DPI/канал), а свежее
+# проходит — поэтому на GET один повтор с новым соединением вместо пропуска цикла.
+_API_TIMEOUT = 15
+
+
 def _api_get(path):
     headers = {"User-Agent": BROWSER_UA}
     if SYNC_SECRET:
         headers["Authorization"] = f"Bearer {SYNC_SECRET}"
     req = urllib.request.Request(API_URL + path, method="GET", headers=headers)
-    with urllib.request.urlopen(req, timeout=10) as r:
-        return json.loads(r.read().decode("utf-8"))
+    last_err = None
+    for attempt in (1, 2):
+        try:
+            with urllib.request.urlopen(req, timeout=_API_TIMEOUT) as r:
+                return json.loads(r.read().decode("utf-8"))
+        except Exception as e:
+            last_err = e
+            if attempt == 1:
+                time.sleep(2)
+    raise last_err
 
 
 def _api_post(path, payload, method="POST"):
