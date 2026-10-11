@@ -17,7 +17,7 @@ import urllib.parse
 import discord
 
 from database import execute, fetch_all, fetch_one, get_setting, set_setting
-from services.api_http import api_delete, api_get, api_post
+from services.api_http import api_call, api_delete, api_get, api_post
 
 API_URL = os.getenv("PANEL_API_URL", "https://melancholia-api.sasha75077.workers.dev").rstrip("/")
 SYNC_SECRET = os.getenv("PANEL_SYNC_SECRET", "")
