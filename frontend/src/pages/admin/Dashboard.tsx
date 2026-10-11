@@ -9,10 +9,6 @@ import {
   Clock,
   Settings,
   Shield,
-  Database,
-  CheckCircle,
-  XCircle,
-  Link as LinkIcon
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -101,10 +97,6 @@ export default function AdminDashboard() {
       </div>
     );
   }
-
-  const sheetsEnabled = settings?.settings?.sheets_enabled === 'True';
-  const sheetId = settings?.settings?.sheet_id;
-  const hasCredentials = settings?.settings?.credentials_path;
 
   // Подсчет ролей
   const adminCount = permissions?.permissions?.filter((p: any) => p.role === 'admin').length || 0;
@@ -249,101 +241,6 @@ export default function AdminDashboard() {
             </div>
           </div>
         </Link>
-      </div>
-
-      {/* Google Sheets Status */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold flex items-center gap-2">
-            <Database size={24} />
-            Google Sheets
-          </h2>
-          <Link
-            to="/settings"
-            className="text-sm text-primary-600 dark:text-primary-400 hover:underline"
-          >
-            Настроить
-          </Link>
-        </div>
-
-        <div className="space-y-3">
-          <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-dark-700 rounded-lg">
-            <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                sheetsEnabled
-                  ? 'bg-green-100 dark:bg-green-900/30'
-                  : 'bg-gray-100 dark:bg-gray-900/30'
-              }`}>
-                {sheetsEnabled ? (
-                  <CheckCircle className="text-green-600 dark:text-green-400" size={20} />
-                ) : (
-                  <XCircle className="text-gray-400" size={20} />
-                )}
-              </div>
-              <div>
-                <p className="font-medium">Статус импорта</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {sheetsEnabled ? 'Включен' : 'Выключен'}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-dark-700 rounded-lg">
-            <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                hasCredentials
-                  ? 'bg-green-100 dark:bg-green-900/30'
-                  : 'bg-red-100 dark:bg-red-900/30'
-              }`}>
-                {hasCredentials ? (
-                  <CheckCircle className="text-green-600 dark:text-green-400" size={20} />
-                ) : (
-                  <XCircle className="text-red-600 dark:text-red-400" size={20} />
-                )}
-              </div>
-              <div>
-                <p className="font-medium">Credentials</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {hasCredentials ? 'Загружен' : 'Не загружен'}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {sheetId && (
-            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-dark-700 rounded-lg">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
-                  <LinkIcon className="text-blue-600 dark:text-blue-400" size={20} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium">Sheet ID</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
-                    {sheetId}
-                  </p>
-                </div>
-              </div>
-              <a
-                href={`https://docs.google.com/spreadsheets/d/${sheetId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary-600 dark:text-primary-400 hover:underline text-sm"
-              >
-                Открыть
-              </a>
-            </div>
-          )}
-        </div>
-
-        <div className="mt-4">
-          <Link
-            to={`/guilds/${guildId}/sheets`}
-            className="btn btn-primary text-sm"
-          >
-            Настроить Google Sheets
-          </Link>
-        </div>
       </div>
 
       {/* Roles Overview */}
