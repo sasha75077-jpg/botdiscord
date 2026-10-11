@@ -580,6 +580,27 @@ async def push_users(guild_id: str):
         return 0
 
 
+SQLITE_INT_MAX = 9223372036854775807
+
+
+def _sq_int(v, default: int = 0) -> int:
+    """Привести к int и ужать до диапазона SQLite INTEGER.
+
+    На сайте для «недостижимых» рангов ставят огромные заглушки
+    (например 1e20), которые не влезают в 64-битный INTEGER и роняли
+    вставку с ошибкой «Python int too large to convert to SQLite INTEGER».
+    """
+    try:
+        n = int(v)
+    except (TypeError, ValueError):
+        return default
+    if n > SQLITE_INT_MAX:
+        return SQLITE_INT_MAX
+    if n < -SQLITE_INT_MAX:
+        return -SQLITE_INT_MAX
+    return n
+
+
 async def pull_ranks(guild_id: str):
     """Лестница рангов и требования с сайта в локальную БД (полная замена)."""
     if not SYNC_SECRET:
@@ -599,21 +620,23 @@ async def pull_ranks(guild_id: str):
         for r in (data or {}).get("ranks", []) or []:
             await execute(
                 "INSERT INTO ranks (id, name, role_id, min_contracts, sort_order, guild_id) VALUES (?, ?, ?, ?, ?, ?)",
-                (r.get("id"), r.get("name"), str(r.get("role_id") or "") if r.get("role_id") else None,
-                 r.get("min_contracts") or 0, r.get("sort_order") or 0, guild_id),
+                (_sq_int(r.get("id")), r.get("name"),
+                 str(r.get("role_id") or "") if r.get("role_id") else None,
+                 _sq_int(r.get("min_contracts")), _sq_int(r.get("sort_order")), guild_id),
             )
         await execute("DELETE FROM rank_requirements_main")
         for r in (req or {}).get("main", []) or []:
             await execute(
                 "INSERT INTO rank_requirements_main (rank_from, rank_to, family_contracts) VALUES (?, ?, ?)",
-                (r.get("rank_from"), r.get("rank_to"), r.get("family_contracts") or 0),
+                (_sq_int(r.get("rank_from")), _sq_int(r.get("rank_to")),
+                 _sq_int(r.get("family_contracts"))),
             )
         await execute("DELETE FROM rank_requirements_alt")
         for r in (req or {}).get("alt", []) or []:
             await execute(
                 "INSERT INTO rank_requirements_alt (rank_from, rank_to, family_contracts, tuning_contracts) VALUES (?, ?, ?, ?)",
-                (r.get("rank_from"), r.get("rank_to"), r.get("family_contracts") or 0,
-                 r.get("tuning_contracts") or 0),
+                (_sq_int(r.get("rank_from")), _sq_int(r.get("rank_to")),
+                 _sq_int(r.get("family_contracts")), _sq_int(r.get("tuning_contracts"))),
             )
     except Exception as e:
         print(f"[ranks-pull] warn apply: {e}")
