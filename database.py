@@ -62,12 +62,18 @@ async def migrate_db():
             print("⚠️  Таблица guilds не найдена. Пропускаем дополнительные миграции.")
             return
 
-        # Создать индекс для bonus_reports если его нет
-        await db.execute("""
-            CREATE UNIQUE INDEX IF NOT EXISTS ux_bonus_reports_week_active
-            ON bonus_reports(guild_id, discord_id, week_start, week_end)
-            WHERE status IN ('NEW','TAKEN','APPROVED');
-        """)
+        # Создать индекс для bonus_reports если его нет.
+        # В try/except: если в данных уже есть дубли активных отчётов (например
+        # отчёты без недели), индекс не встанет — но это не должно ронять
+        # остальные миграции.
+        try:
+            await db.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS ux_bonus_reports_week_active
+                ON bonus_reports(guild_id, discord_id, week_start, week_end)
+                WHERE status IN ('NEW','TAKEN','APPROVED');
+            """)
+        except Exception as e:
+            print(f"⚠️  ux_bonus_reports_week_active: не создан ({e})")
 
         # site_id для связи локальных заявок с панелью
         try:
@@ -201,6 +207,19 @@ async def migrate_db():
                 print("✅ v_contract_value: пересоздана на новых таблицах")
         except Exception as e:
             print(f"⚠️  v_contract_value migrate: {e}")
+
+        # promo_credits: колонки аннулирования (функция void_promo_credits_by_contract
+        # обращается к ним, но в таблице их не было — падала бы при вызове)
+        for ddl in (
+            "ALTER TABLE promo_credits ADD COLUMN voided INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE promo_credits ADD COLUMN voided_by TEXT",
+            "ALTER TABLE promo_credits ADD COLUMN voided_reason TEXT",
+            "ALTER TABLE promo_credits ADD COLUMN voided_at TEXT",
+        ):
+            try:
+                await db.execute(ddl)
+            except Exception:
+                pass  # колонка уже есть
 
         # rank_requirements_*: снять легаси-FK на ranks_old.
         # ranks_old содержит только старые ранги одной гильдии (id 3-10), а ranks —

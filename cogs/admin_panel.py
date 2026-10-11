@@ -256,7 +256,7 @@ async def count_pending_contracts(guild_id: str | None = None) -> int:
 
 async def count_pending_promos(guild_id: str | None = None) -> int:
     row = await fetch_one(
-        "SELECT COUNT(*) AS cnt FROM promotion_reports WHERE status IN ('NEW','TAKEN') AND (? IS NULL OR guild_id = ? OR guild_id IS NULL)",
+        "SELECT COUNT(*) AS cnt FROM promotion_reports WHERE status IN ('NEW','TAKEN') AND (? IS NULL OR guild_id = ?)",
         (guild_id, guild_id)
     )
     return int(row["cnt"] or 0) if row else 0
@@ -3531,7 +3531,7 @@ async def approve_contract(interaction: discord.Interaction, contract_id: int):
         if is_personal:
             # ТЮНИНГ: удаляем старые за день и добавляем новую (обходит UNIQUE)
             await execute(
-                "DELETE FROM promo_credits WHERE discord_id=? AND credit_day=? AND credit_kind=? AND contract_type=? AND (? = '' OR guild_id = ? OR guild_id IS NULL)",
+                "DELETE FROM promo_credits WHERE discord_id=? AND credit_day=? AND credit_kind=? AND contract_type=? AND (? = '' OR guild_id = ?)",
                 (str(discord_id), credit_day, credit_kind, ct, _cg, _cg)
             )
             await execute(
@@ -3549,7 +3549,7 @@ async def approve_contract(interaction: discord.Interaction, contract_id: int):
             )
             row = await fetch_one(
                 "SELECT 1 AS ok FROM promo_credits "
-                "WHERE discord_id=? AND credit_day=? AND credit_kind=? AND contract_type=? AND contract_id=? AND (? = '' OR guild_id = ? OR guild_id IS NULL)",
+                "WHERE discord_id=? AND credit_day=? AND credit_kind=? AND contract_type=? AND contract_id=? AND (? = '' OR guild_id = ?)",
                 (str(discord_id), credit_day, credit_kind, ct, int(contract_id), _cg, _cg)
             )
             counted_for_promo = bool(row)
@@ -3753,14 +3753,14 @@ async def show_promo_reports(interaction: discord.Interaction, page: int = 0):
            LEFT JOIN ranks r1 ON pr.from_rank_id = r1.id
            LEFT JOIN ranks r2 ON pr.to_rank_id = r2.id
            WHERE pr.status IN ('NEW','TAKEN')
-             AND (? IS NULL OR pr.guild_id = ? OR pr.guild_id IS NULL)
+             AND (? IS NULL OR pr.guild_id = ?)
            ORDER BY pr.report_id DESC
            LIMIT 10 OFFSET ?""",
         (gid, gid, page * 10)
     )
     total = await fetch_one(
         "SELECT COUNT(*) AS cnt FROM promotion_reports WHERE status IN ('NEW','TAKEN')"
-        " AND (? IS NULL OR guild_id = ? OR guild_id IS NULL)",
+        " AND (? IS NULL OR guild_id = ?)",
         (gid, gid))
     total_count = total["cnt"] if total else 0
 
