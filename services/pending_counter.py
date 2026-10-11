@@ -2,7 +2,6 @@ import discord
 from database import fetch_one, execute, get_setting, set_setting
 
 PENDING_MSG_KEY = "pending_counter_message_id"
-_warned_no_channel: set = set()  # не спамить в лог одинаковым сообщением каждый цикл
 
 async def upsert_pending_counter_message(bot: discord.Client, content: str, guild_id: str):
     """
@@ -24,13 +23,7 @@ async def upsert_pending_counter_message(bot: discord.Client, content: str, guil
         channel_id_str = await get_setting("admin_contracts_channel_id", guild_id)
 
     if not channel_id_str:
-        if guild_id not in _warned_no_channel:
-            _warned_no_channel.add(guild_id)
-            print(
-                f"[Guild {guild_id}] pending_counter_channel_id не настроен — "
-                f"счетчик ожидания выключен. Настрой: /setup_channels "
-                f"pending_counter_channel:#канал"
-            )
+        # Канал не настроен — счетчик ожидания просто выключен (без предупреждения)
         return None
 
     channel_id = int(channel_id_str)
